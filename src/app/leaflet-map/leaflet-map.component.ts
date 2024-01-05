@@ -56,10 +56,9 @@ export class LeafletMapComponent implements OnInit {
         this.fetchTemperatureData();
         this.addLegend();
         this.addDigitalShadowLegend();
-        this.createColoredMarkers();
+        this.createMarkers();
         const averageTemp = this.temperatureData.reduce((sum, data) => sum + data.temp, 0) / this.temperatureData.length;
         this.addTemperatureLegend(averageTemp);
-        
       });
       
       setInterval(() => {
@@ -96,15 +95,25 @@ export class LeafletMapComponent implements OnInit {
   }
 
   private loadTemperatureData() {
-    this.http.get<any[]>('assets/temperatureData.json').subscribe(data => {
-      this.temperatureData = data;
-      this.createColoredMarkers();
+    this.http.get<any>('assets/wuppertal_quartiere.json').subscribe(data => {
+        this.temperatureData = data.features.map((feature: any) => {
+            return {
+                temp: feature.properties.temp,
+                lat: feature.properties.lat,
+                lng: feature.properties.lng 
+            };
+        });
+        this.createMarkers();
     });
-  }
+}
 
   private updateTemperatureData() {
     this.temperatureData.forEach(data => {
       data.temp = this.settingTemp + Math.random() * this.settingRange;
+
+      const color = this.getColor(data.temp);
+
+      this.map 
     });
   }
 
@@ -175,11 +184,10 @@ export class LeafletMapComponent implements OnInit {
     descriptionLegend.addTo(this.map);
   }
 
-  private createColoredMarkers() {
+  private createMarkers() {
     this.markers = [];
     this.temperatureData.forEach((data, index) => {
-      const color = this.getColorForTemperature(data.temp);
-      const icon = this.createColoredSvgIcon(color);
+      const icon = this.createSvgIcon();
   
       const marker = L.marker([data.lat, data.lng], { icon: icon }).bindPopup(`Temperatur: ${data.temp}°C`);
       marker.addTo(this.map);
@@ -194,34 +202,31 @@ export class LeafletMapComponent implements OnInit {
     });
   }
 
-  private getColorForTemperature(temp: number): string {
-    const temperatureRanges = [0, 5, 10, 15, 20, 25, 30, 35];
-    const colors = ['#313695', '#4575b4', '#74add1', '#abd9e9', '#e0f3f8', '#fee090', '#fdae61', '#f46d43'];
-  
-    for (let i = 0; i < temperatureRanges.length; i++) {
-      if (temp <= temperatureRanges[i]) {
-        return colors[i];
-      }
-    }
-    return colors[colors.length - 1];
+  private getColor(d: number) {
+    return d > 35 ? '#f46d43' :
+           d > 30  ? '#fdae61' :
+           d > 25  ? '#fee090' :
+           d > 20  ? '#e0f3f8' :
+           d > 15   ? '#abd9e9' :
+           d > 10   ? '#74add1' :
+           d > 5   ? '#4575b4' :
+                      '#313695';
   }
 
-  private createColoredSvgIcon(color: string): L.Icon {
+  private createSvgIcon(): L.Icon {
     const iconUrl = 'assets/temperature.svg';
   
     return L.icon({
       iconUrl: iconUrl,
       iconSize: [20, 40],
       iconAnchor: [0, 30],
-      popupAnchor: [10, -25],
-      className: `icon-${color}`
+      popupAnchor: [10, -25]
     });
   }
 
   private fetchTemperatureData() {
     const apiUrl = 'http://api.weatherstack.com/current?access_key=37e2da2c2917f40932030c5cbab0d188&query=Wuppertal&units=m'; 
     this.http.get<WeatherApiResponse>(apiUrl).subscribe(data => {
-      console.log(data);
       this.addTemperatureWeatherReportLegend(data.current.temperature); 
     });
   }
