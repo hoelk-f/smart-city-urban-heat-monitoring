@@ -21,6 +21,7 @@ export class LeafletMapComponent implements OnInit {
   private temperatureWeatherReportLegend!: L.Control;
   private markers: L.Marker[] = [];
   private temperatureData: any[] = [];
+  private geoJsonLayer: L.GeoJSON | null = null;
   private defaultStyle = {
     color: "#3388ff",
     weight: 3,
@@ -34,7 +35,7 @@ export class LeafletMapComponent implements OnInit {
     this.resetHighlight = this.resetHighlight.bind(this);
     this.zoomToFeature = this.zoomToFeature.bind(this);
    }
-  
+
   ngOnInit(): void {
     if (typeof window !== 'undefined') {
       import('leaflet').then(L => {
@@ -43,11 +44,18 @@ export class LeafletMapComponent implements OnInit {
           maxZoom: 19,
           attribution: '© OpenStreetMap contributors'
         }).addTo(this.map);
-        L.geoJSON(wuppertalQuartierejsonData as GeoJsonObject, {
+        this.geoJsonLayer = L.geoJSON(wuppertalQuartierejsonData as GeoJsonObject, {
+          style: (feature) => {
+            return {
+                fillColor: this.getColor(feature!.properties.temp),
+                weight: 2,
+                opacity: 1,
+                color: 'white',
+                fillOpacity: 0.7
+            };
+        },
           onEachFeature: (feature, layer) => {
             layer.on({
-              mouseover: this.highlightFeature,
-              mouseout: this.resetHighlight,
               click: this.zoomToFeature
             });
           }
@@ -105,15 +113,11 @@ export class LeafletMapComponent implements OnInit {
         });
         this.createMarkers();
     });
-}
+  }
 
   private updateTemperatureData() {
     this.temperatureData.forEach(data => {
       data.temp = this.settingTemp + Math.random() * this.settingRange;
-
-      const color = this.getColor(data.temp);
-
-      this.map 
     });
   }
 
@@ -202,17 +206,6 @@ export class LeafletMapComponent implements OnInit {
     });
   }
 
-  private getColor(d: number) {
-    return d > 35 ? '#f46d43' :
-           d > 30  ? '#fdae61' :
-           d > 25  ? '#fee090' :
-           d > 20  ? '#e0f3f8' :
-           d > 15   ? '#abd9e9' :
-           d > 10   ? '#74add1' :
-           d > 5   ? '#4575b4' :
-                      '#313695';
-  }
-
   private createSvgIcon(): L.Icon {
     const iconUrl = 'assets/temperature.svg';
   
@@ -229,6 +222,17 @@ export class LeafletMapComponent implements OnInit {
     this.http.get<WeatherApiResponse>(apiUrl).subscribe(data => {
       this.addTemperatureWeatherReportLegend(data.current.temperature); 
     });
+  }
+
+  public getColor(d: number): string {
+    return d > 35 ? '#f46d43' :
+           d > 30  ? '#fdae61' :
+           d > 25  ? '#fee090' :
+           d > 20  ? '#e0f3f8' :
+           d > 15   ? '#abd9e9' :
+           d > 10   ? '#74add1' :
+           d > 5   ? '#4575b4' :
+                      '#313695';
   }
 
   onResize() {
