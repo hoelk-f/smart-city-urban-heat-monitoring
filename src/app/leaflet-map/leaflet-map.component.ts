@@ -1,7 +1,5 @@
 import { HttpClient } from '@angular/common/http';
 import { Component, OnInit } from '@angular/core';
-import wuppertalQuartierejsonData from '../../assets/wuppertal_quartiere.json';
-import { GeoJsonObject } from 'geojson';
 import { LeafletMouseEvent } from 'leaflet';
 import { WeatherApiResponse } from '../interface/WeatherApiResponse'; 
 import * as L from 'leaflet';
@@ -12,6 +10,7 @@ import * as L from 'leaflet';
   styleUrls: ['./leaflet-map.component.css'],
   standalone: true
 })
+
 export class LeafletMapComponent implements OnInit {
   private settingTemp: number = 5;
   private settingRange: number = 12;
@@ -21,19 +20,8 @@ export class LeafletMapComponent implements OnInit {
   private temperatureWeatherReportLegend!: L.Control;
   private markers: L.Marker[] = [];
   private temperatureData: any[] = [];
-  private geoJsonLayer: L.GeoJSON | null = null;
-  private defaultStyle = {
-    color: "#3388ff",
-    weight: 3,
-    opacity: 1,
-    fillOpacity: 0.2,
-    fillColor: "#3388ff"
-  };
 
   constructor(private http: HttpClient) {
-    this.highlightFeature = this.highlightFeature.bind(this);
-    this.resetHighlight = this.resetHighlight.bind(this);
-    this.zoomToFeature = this.zoomToFeature.bind(this);
    }
 
   ngOnInit(): void {
@@ -44,80 +32,61 @@ export class LeafletMapComponent implements OnInit {
           maxZoom: 19,
           attribution: '© OpenStreetMap contributors'
         }).addTo(this.map);
-        this.geoJsonLayer = L.geoJSON(wuppertalQuartierejsonData as GeoJsonObject, {
-          style: (feature) => {
-            return {
-                fillColor: this.getColor(feature!.properties.temp),
-                weight: 2,
-                opacity: 1,
-                color: 'white',
-                fillOpacity: 0.7
-            };
-        },
-          onEachFeature: (feature, layer) => {
-            layer.on({
-              click: this.zoomToFeature
-            });
-          }
-        }).addTo(this.map);
+        
+        const averageTemp = this.temperatureData.reduce((sum, data) => sum + data.temp, 0) / this.temperatureData.length;
         this.loadTemperatureData();
         this.fetchTemperatureData();
         this.addLegend();
         this.addDigitalShadowLegend();
-        this.createMarkers();
-        const averageTemp = this.temperatureData.reduce((sum, data) => sum + data.temp, 0) / this.temperatureData.length;
         this.addTemperatureLegend(averageTemp);
+        this.createMarkers();
       });
       
       setInterval(() => {
-        this.updateTemperatureData();
         const averageTemp = this.calculateAverageTemperature();
+        this.updateTemperatureData();
         this.updateTemperatureLegend(averageTemp);
         this.updateMarkers();
       }, this.settingInterval);
     }
   }
 
-  private highlightFeature(e: LeafletMouseEvent) {
-    var layer = e.target as L.Path;
-  
-    layer.setStyle({
-      weight: 5,
-      color: '#3388ff',
-      dashArray: '',
-      fillOpacity: 0.7
-    });
-  
-    if (!L.Browser.ie && !L.Browser.opera && !L.Browser.edge) {
-      layer.bringToFront();
-    }
-  }
-  
-  private resetHighlight(e: LeafletMouseEvent) {
-    var layer = e.target as L.Path;
-    layer.setStyle(this.defaultStyle);
-  }
-  
-  private zoomToFeature(e: LeafletMouseEvent) {
-    this.map.fitBounds(e.target.getBounds());
-  }
-
   private loadTemperatureData() {
-    this.http.get<any>('assets/wuppertal_quartiere.json').subscribe(data => {
-        this.temperatureData = data.features.map((feature: any) => {
-            return {
-                temp: feature.properties.temp,
-                lat: feature.properties.lat,
-                lng: feature.properties.lng 
-            };
-        });
-        this.createMarkers();
+    this.http.get<any>('assets/modified_wuppertal_quartiere.json').subscribe(data => {
+      this.temperatureData = data.features.map((feature: any) => {
+          return {
+              temp: feature.properties.temp,
+              lat: feature.properties.lat,
+              lng: feature.properties.lng,
+              coordinates: feature.geometry.coordinates
+          };
+      });
+      this.createMarkers();
+      this.initializePolygonLayer();
     });
   }
 
   private updateTemperatureData() {
     this.temperatureData.forEach(data => {
       data.temp = this.settingTemp + Math.random() * this.settingRange;
+  
+      if (data.polygonLayer) {
+        data.polygonLayer.setStyle({ fillColor: this.getColor(data.temp) });
+      }
+    });
+  }
+
+  private initializePolygonLayer(): void {
+    this.temperatureData.forEach(data => {
+      if (data.coordinates) {
+        const polygon = L.polygon(data.coordinates, { 
+          fillColor: this.getColor(data.temp), 
+          fillOpacity: 0.7, 
+          color: "white" })
+        .addTo(this.map);
+
+        data.polygonLayer = polygon;
+      }
     });
   }
 
@@ -191,7 +160,7 @@ export class LeafletMapComponent implements OnInit {
   private createMarkers() {
     this.markers = [];
     this.temperatureData.forEach((data, index) => {
-      const icon = this.createSvgIcon();
+      const icon = this.createIcon();
   
       const marker = L.marker([data.lat, data.lng], { icon: icon }).bindPopup(`Temperatur: ${data.temp}°C`);
       marker.addTo(this.map);
@@ -206,14 +175,14 @@ export class LeafletMapComponent implements OnInit {
     });
   }
 
-  private createSvgIcon(): L.Icon {
-    const iconUrl = 'assets/temperature.svg';
+  private createIcon(): L.Icon {
+    const iconUrl = 'assets/temperature.png';
   
     return L.icon({
       iconUrl: iconUrl,
-      iconSize: [20, 40],
+      iconSize: [15, 30],
       iconAnchor: [0, 30],
-      popupAnchor: [10, -25]
+      popupAnchor: [7, -30]
     });
   }
 
