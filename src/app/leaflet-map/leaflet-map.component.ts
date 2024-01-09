@@ -218,14 +218,12 @@ export class LeafletMapComponent implements OnInit {
   
     if (Array.isArray(allVertices)) {
       if (allVertices.length > 0 && Array.isArray(allVertices[0])) {
-        // Multi-polygon
         allVertices.forEach(part => {
           if (Array.isArray(part) && part.length > 0 && part[0] instanceof L.LatLng) {
             processVertices(part as L.LatLng[]);
           }
         });
       } else if (allVertices[0] instanceof L.LatLng) {
-        // Simple polygon
         processVertices(allVertices as L.LatLng[]);
       }
     }
