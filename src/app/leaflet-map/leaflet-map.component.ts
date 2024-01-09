@@ -1,7 +1,9 @@
 import { HttpClient } from '@angular/common/http';
 import { Component, OnInit } from '@angular/core';
-import { LeafletMouseEvent } from 'leaflet';
+import { Observable, of } from 'rxjs';
+import { catchError, map } from 'rxjs/operators';
 import { WeatherApiResponse } from '../interface/WeatherApiResponse'; 
+import { MarkerData } from '../interface/MarkerData';
 import * as L from 'leaflet';
 
 @Component({
@@ -12,17 +14,14 @@ import * as L from 'leaflet';
 })
 
 export class LeafletMapComponent implements OnInit {
-  private settingTemp: number = 5;
-  private settingRange: number = 12;
-  private settingInterval: number = 5000;
   private map!: L.Map;
   private temperatureLegend!: L.Control;
   private temperatureWeatherReportLegend!: L.Control;
   private markers: L.Marker[] = [];
   private temperatureData: any[] = [];
+  private markerData: MarkerData[] = [];
 
-  constructor(private http: HttpClient) {
-   }
+  constructor(private http: HttpClient) {}
 
   ngOnInit(): void {
     if (typeof window !== 'undefined') {
@@ -32,44 +31,66 @@ export class LeafletMapComponent implements OnInit {
           maxZoom: 19,
           attribution: '© OpenStreetMap contributors'
         }).addTo(this.map);
-        
+
         const averageTemp = this.temperatureData.reduce((sum, data) => sum + data.temp, 0) / this.temperatureData.length;
-        this.loadTemperatureData();
+        this.addTemperatureLegend(averageTemp);
+        this.initializeTemperatureData();
+        this.updateTemperatureData();
         this.fetchTemperatureData();
         this.addLegend();
         this.addDigitalShadowLegend();
-        this.addTemperatureLegend(averageTemp);
         this.createMarkers();
       });
       
       setInterval(() => {
-        const averageTemp = this.calculateAverageTemperature();
-        this.updateTemperatureData();
+        const averageTemp = this.calculateOverallAverageTemperature();
         this.updateTemperatureLegend(averageTemp);
-        this.updateMarkers();
-      }, this.settingInterval);
+      }, 5000);
     }
   }
 
-  private loadTemperatureData() {
-    this.http.get<any>('assets/modified_wuppertal_quartiere.json').subscribe(data => {
-      this.temperatureData = data.features.map((feature: any) => {
-          return {
-              temp: feature.properties.temp,
-              lat: feature.properties.lat,
-              lng: feature.properties.lng,
-              coordinates: feature.geometry.coordinates
-          };
-      });
-      this.createMarkers();
-      this.initializePolygonLayer();
+  private initializeTemperatureData() {
+    this.fetchTemperatureData().subscribe(initialTemp => {
+        this.initializeWeatherReportLegend(initialTemp);
+
+        this.http.get<any>('assets/modified_wuppertal_quartiere.json').subscribe(data => {
+            this.temperatureData = [];
+
+            data.features.forEach((feature: any) => {
+                if (feature.properties.sensors && feature.properties.sensors.length > 0) {
+                    let sensor = feature.properties.sensors[0];
+                    let temp = this.randomizeTemperature(initialTemp);
+
+                    this.temperatureData.push({
+                        temp: temp,
+                        lat: sensor.lat,
+                        lng: sensor.lng,
+                        coordinates: feature.geometry.coordinates,
+                        name: feature.properties.NAME
+                    });
+
+                    this.markerData.push({
+                        temp: temp,
+                        lat: sensor.lat,
+                        lng: sensor.lng
+                    });
+                }
+            });
+
+            this.createMarkers();
+            this.initializePolygonLayer();
+        });
     });
+  }
+
+  private randomizeTemperature(baseTemp: number): number {
+    const variation = Math.random() * 4 - 1;
+    const result = parseFloat((baseTemp + variation).toFixed(2));
+    return result;
   }
 
   private updateTemperatureData() {
     this.temperatureData.forEach(data => {
-      data.temp = this.settingTemp + Math.random() * this.settingRange;
-  
       if (data.polygonLayer) {
         data.polygonLayer.setStyle({ fillColor: this.getColor(data.temp) });
       }
@@ -79,19 +100,149 @@ export class LeafletMapComponent implements OnInit {
   private initializePolygonLayer(): void {
     this.temperatureData.forEach(data => {
       if (data.coordinates) {
+        
         const polygon = L.polygon(data.coordinates, { 
           fillColor: this.getColor(data.temp), 
           fillOpacity: 0.7, 
-          color: "white" })
+          color: "white"})
         .addTo(this.map);
+
+        const resetStyle = () => {
+          polygon.setStyle({
+            fillColor: this.getColor(data.temp),
+            fillOpacity: 0.7
+          });
+        };
+
+        const highlightPolygon = () => {
+          polygon.setStyle({
+            fillColor: this.getColor(data.temp),
+            fillOpacity: 1.0
+          });
+        };
+
+        const updateLegend = (content: string) => {
+          const legendDiv = document.getElementById('info-legend');
+          if (legendDiv) {
+            legendDiv.innerHTML = content;
+            legendDiv.style.display = 'block';
+          }
+        };
+
+        polygon.on('mouseover', (e) => {
+          highlightPolygon();
+          const markersInside = this.getMarkersInsidePolygon(polygon);
+          const meanTemp = this.calculateMeanTemperature(markersInside);
+          const content = `<strong>` + data.name + `</strong>` + `<br><br> ⌀ Temperatur: ${meanTemp.toFixed(2)}°C`;
+          updateLegend(content);
+        });
+
+        polygon.on('mouseout', (e) => {
+          resetStyle();
+          updateLegend('');
+          document.getElementById('info-legend')!.style.display = 'none';
+        });
+
+        polygon.on('click', (e) => {
+          const bounds = polygon.getBounds();
+          this.map.fitBounds(bounds);
+        });
+
+        polygon.on('contextmenu', (e) => {
+          const clickLocation = e.latlng;
+          const marker = L.marker([clickLocation.lat, clickLocation.lng], {icon: this.createIcon('assets/temperature_new.png')}).addTo(this.map);
+  
+          marker.on('contextmenu', () => {
+            this.map.removeLayer(marker);
+          });
+        });
+
+        polygon.on('contextmenu', (e) => {
+          const clickLocation = e.latlng;
+      
+          let tempValueString: string | null = prompt("Please enter the temperature value:", "");
+      
+          if (tempValueString !== null && tempValueString.trim() !== "" && !isNaN(Number(tempValueString))) {
+              let tempValue: number = Number(tempValueString);
+      
+              const marker = L.marker([clickLocation.lat, clickLocation.lng], {icon: this.createIcon('assets/temperature_new.png')}).addTo(this.map);
+      
+              this.markerData.push({
+                  lat: clickLocation.lat,
+                  lng: clickLocation.lng,
+                  temp: tempValue
+              });
+      
+              marker.bindPopup(`Temperatur: ${tempValue}°C`).openTooltip();
+      
+              marker.on('click', () => {
+                  marker.openTooltip();
+              });
+      
+              marker.on('contextmenu', () => {
+                  this.map.removeLayer(marker);
+                  this.markerData = this.markerData.filter(md => md.lat !== clickLocation.lat || md.lng !== clickLocation.lng);
+              });
+          } else {
+              alert("Please enter a valid temperature value.");
+          }
+        });
 
         data.polygonLayer = polygon;
       }
     });
   }
 
-  private calculateAverageTemperature() {
-    return this.temperatureData.reduce((sum, data) => sum + data.temp, 0) / this.temperatureData.length;
+  private getMarkersInsidePolygon(polygon: L.Polygon): any[] {
+    return this.markerData.filter(markerData => {
+      return this.isMarkerInsidePolygon(markerData, polygon);
+    });
+  }
+
+  private isMarkerInsidePolygon(marker: MarkerData, polygon: L.Polygon): boolean {
+    const x = marker.lat, y = marker.lng;
+    let inside = false;
+  
+    const processVertices = (vertices: L.LatLng[]) => {
+      for (let i = 0, j = vertices.length - 1; i < vertices.length; j = i++) {
+        const xi = vertices[i].lat, yi = vertices[i].lng;
+        const xj = vertices[j].lat, yj = vertices[j].lng;
+  
+        const intersect = ((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
+  
+        if (intersect) inside = !inside;
+      }
+    };
+  
+    const allVertices = polygon.getLatLngs();
+  
+    if (Array.isArray(allVertices)) {
+      if (allVertices.length > 0 && Array.isArray(allVertices[0])) {
+        // Multi-polygon
+        allVertices.forEach(part => {
+          if (Array.isArray(part) && part.length > 0 && part[0] instanceof L.LatLng) {
+            processVertices(part as L.LatLng[]);
+          }
+        });
+      } else if (allVertices[0] instanceof L.LatLng) {
+        // Simple polygon
+        processVertices(allVertices as L.LatLng[]);
+      }
+    }
+  
+    return inside;
+  }
+  
+  private calculateMeanTemperature(markers: Array<any>): number {
+    const total = markers.reduce((acc, marker) => acc + marker.temp, 0);
+    return markers.length > 0 ? total / markers.length : 0;
+  }
+
+  private calculateOverallAverageTemperature() {
+    if (this.markerData.length === 0) {
+        return 0;
+    }
+    return this.markerData.reduce((sum, marker) => sum + marker.temp, 0) / this.markerData.length;
   }
 
   private updateTemperatureLegend(averageTemp: number) {
@@ -123,7 +274,7 @@ export class LeafletMapComponent implements OnInit {
     this.temperatureLegend = new L.Control({ position: 'topright' });
     this.temperatureLegend.onAdd = function (map) {
       const div = L.DomUtil.create('div', 'info legend');
-      div.innerHTML = `<h4>⌀ Temperatur</h4>${averageTemp.toFixed(1)} °C`;
+      div.innerHTML = `<h4>⌀ Temperatur</h4>${averageTemp.toFixed(2)} °C`;
       return div;
     };
     this.temperatureLegend.addTo(this.map);
@@ -137,7 +288,7 @@ export class LeafletMapComponent implements OnInit {
 
     this.temperatureWeatherReportLegend.onAdd = function (map) {
       const div = L.DomUtil.create('div', 'info temperature-legend');
-      div.innerHTML = `<h4>Wetterbericht</h4>${temperature.toFixed(1)} °C`;
+      div.innerHTML = `<h4>Wetterbericht</h4>${temperature.toFixed(2)} °C`;
       return div;
     };
 
@@ -159,24 +310,25 @@ export class LeafletMapComponent implements OnInit {
 
   private createMarkers() {
     this.markers = [];
-    this.temperatureData.forEach((data, index) => {
-      const icon = this.createIcon();
-  
-      const marker = L.marker([data.lat, data.lng], { icon: icon }).bindPopup(`Temperatur: ${data.temp}°C`);
-      marker.addTo(this.map);
-      this.markers.push(marker);
+    this.temperatureData.forEach((data) => {
+        const icon = this.createIcon('assets/temperature.png');
+
+        const marker = L.marker([data.lat, data.lng], { icon: icon })
+            .bindPopup(`Temperatur: ${data.temp}°C`);
+        marker.addTo(this.map);
+        this.markers.push(marker);
     });
   }
 
   private updateMarkers() {
     this.markers.forEach((marker, index) => {
       const temp = this.temperatureData[index].temp;
-      marker.setPopupContent(`Temperatur: ${temp.toFixed(1)}°C`);
+      marker.setPopupContent(`Temperatur: ${temp.toFixed(2)}°C`);
     });
   }
 
-  private createIcon(): L.Icon {
-    const iconUrl = 'assets/temperature.png';
+  private createIcon(path: string): L.Icon {
+    const iconUrl = path;
   
     return L.icon({
       iconUrl: iconUrl,
@@ -186,21 +338,35 @@ export class LeafletMapComponent implements OnInit {
     });
   }
 
-  private fetchTemperatureData() {
-    const apiUrl = 'http://api.weatherstack.com/current?access_key=37e2da2c2917f40932030c5cbab0d188&query=Wuppertal&units=m'; 
-    this.http.get<WeatherApiResponse>(apiUrl).subscribe(data => {
-      this.addTemperatureWeatherReportLegend(data.current.temperature); 
-    });
+  private initializeWeatherReportLegend(temperature: number): void {
+    this.addTemperatureWeatherReportLegend(temperature);
   }
 
+  private fetchTemperatureData(): Observable<number> {
+    const apiUrl = 'http://api.weatherstack.com/current?access_key=37e2da2c2917f40932030c5cbab0d188&query=Wuppertal&units=m'; 
+    return this.http.get<WeatherApiResponse>(apiUrl).pipe(
+        map(data => {
+            if (data && data.current && typeof data.current.temperature === 'number') {
+                return data.current.temperature;
+            } else {
+                throw new Error('Invalid data structure');
+            }
+        }),
+        catchError(err => {
+            console.error('Error fetching weather data:', err);
+            return of(0);
+        })
+    );
+}
+
   public getColor(d: number): string {
-    return d > 35 ? '#f46d43' :
-           d > 30  ? '#fdae61' :
-           d > 25  ? '#fee090' :
-           d > 20  ? '#e0f3f8' :
-           d > 15   ? '#abd9e9' :
-           d > 10   ? '#74add1' :
-           d > 5   ? '#4575b4' :
+    return d >= 35 ? '#f46d43' :
+           d >= 30  ? '#fdae61' :
+           d >= 25  ? '#fee090' :
+           d >= 20  ? '#e0f3f8' :
+           d >= 15   ? '#abd9e9' :
+           d >= 10   ? '#74add1' :
+           d >= 5   ? '#4575b4' :
                       '#313695';
   }
 
