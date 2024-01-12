@@ -16,6 +16,7 @@ import * as L from 'leaflet';
 export class LeafletMapComponent implements OnInit {
   private map!: L.Map;
   private temperatureLegend!: L.Control;
+  private weatherReportTemp: number = 0;
   private temperatureWeatherReportLegend!: L.Control;
   private markers: L.Marker[] = [];
   private temperatureData: any[] = [];
@@ -32,11 +33,13 @@ export class LeafletMapComponent implements OnInit {
           attribution: '© OpenStreetMap contributors'
         }).addTo(this.map);
 
+        this.fetchTemperatureData().subscribe(data => {
+          this.weatherReportTemp = data;
+        });
+
         const averageTemp = this.temperatureData.reduce((sum, data) => sum + data.temp, 0) / this.temperatureData.length;
         this.addTemperatureLegend(averageTemp);
         this.initializeTemperatureData();
-        this.updateTemperatureData();
-        this.fetchTemperatureData();
         this.addLegend();
         this.addDigitalShadowLegend();
         this.createMarkers();
@@ -50,37 +53,38 @@ export class LeafletMapComponent implements OnInit {
   }
 
   private initializeTemperatureData() {
-    this.fetchTemperatureData().subscribe(initialTemp => {
-        this.initializeWeatherReportLegend(initialTemp);
+    
+      this.initializeWeatherReportLegend(this.weatherReportTemp);
 
-        this.http.get<any>('assets/modified_wuppertal_quartiere.json').subscribe(data => {
-            this.temperatureData = [];
+      this.http.get<any>('assets/modified_wuppertal_quartiere.json').subscribe(data => {
+          this.temperatureData = [];
 
-            data.features.forEach((feature: any) => {
-                if (feature.properties.sensors && feature.properties.sensors.length > 0) {
-                    let sensor = feature.properties.sensors[0];
-                    let temp = this.randomizeTemperature(initialTemp);
+          data.features.forEach((feature: any) => {
+              if (feature.properties.sensors && feature.properties.sensors.length > 0) {
+                  let sensor = feature.properties.sensors[0];
+                  let temp = this.randomizeTemperature(this.weatherReportTemp);
 
-                    this.temperatureData.push({
-                        temp: temp,
-                        lat: sensor.lat,
-                        lng: sensor.lng,
-                        coordinates: feature.geometry.coordinates,
-                        name: feature.properties.NAME
-                    });
+                  this.temperatureData.push({
+                      temp: temp,
+                      lat: sensor.lat,
+                      lng: sensor.lng,
+                      coordinates: feature.geometry.coordinates,
+                      name: feature.properties.NAME,
+                      activated: sensor.activated
+                  });
 
-                    this.markerData.push({
-                        temp: temp,
-                        lat: sensor.lat,
-                        lng: sensor.lng
-                    });
-                }
-            });
+                  this.markerData.push({
+                      temp: temp,
+                      lat: sensor.lat,
+                      lng: sensor.lng,
+                      activated: sensor.activated
+                  });
+              }
+          });
 
-            this.createMarkers();
-            this.initializePolygonLayer();
-        });
-    });
+          this.createMarkers();
+          this.initializePolygonLayer();
+      });
   }
 
   private randomizeTemperature(baseTemp: number): number {
@@ -92,7 +96,7 @@ export class LeafletMapComponent implements OnInit {
   private updateTemperatureData() {
     this.temperatureData.forEach(data => {
       if (data.polygonLayer) {
-        data.polygonLayer.setStyle({ fillColor: this.getColor(data.temp) });
+        data.polygonLayer.setStyle({ fillColor: this.getColor(data.polygonLayer) });
       }
     });
   }
@@ -101,23 +105,23 @@ export class LeafletMapComponent implements OnInit {
     this.temperatureData.forEach(data => {
       if (data.coordinates) {
         
-        const polygon = L.polygon(data.coordinates, { 
-          fillColor: this.getColor(data.temp), 
-          fillOpacity: 0.7, 
+        const polygon = L.polygon(data.coordinates, {
+          fillColor: this.getColor(1), 
+          fillOpacity: 0.4, 
           color: "white"})
         .addTo(this.map);
 
         const resetStyle = () => {
           polygon.setStyle({
-            fillColor: this.getColor(data.temp),
-            fillOpacity: 0.7
+            fillColor: this.getColor(this.countMarkersInsidePolygon(polygon)),
+            fillOpacity: 0.4
           });
         };
 
         const highlightPolygon = () => {
           polygon.setStyle({
-            fillColor: this.getColor(data.temp),
-            fillOpacity: 1.0
+            fillColor: this.getColor(this.countMarkersInsidePolygon(polygon)),
+            fillOpacity: 0.7
           });
         };
 
@@ -133,7 +137,24 @@ export class LeafletMapComponent implements OnInit {
           highlightPolygon();
           const markersInside = this.getMarkersInsidePolygon(polygon);
           const meanTemp = this.calculateMeanTemperature(markersInside);
-          const content = `<strong>` + data.name + `</strong>` + `<br><br> ⌀ Temperatur: ${meanTemp.toFixed(2)}°C`;
+          var countMarkersInside = this.countMarkersInsidePolygon(polygon);
+          
+          
+          var content = '';
+          if(countMarkersInside == 0)
+          {
+            content = 
+            `<strong>${data.name}</strong>` +
+            `<br><br><img src="assets/weather.png" alt="Description" style="width:14px; height:15px;"> Temperatur: ${this.weatherReportTemp}°C` +
+            `<br><br> Anzahl Sensoren: ${countMarkersInside}`;
+          }
+          else {
+            content = 
+            `<strong>${data.name}</strong>` +
+            `<br><br><img src="assets/sensor.png" alt="Description" style="width:14px; height:15px;"> ⌀ Temperatur: ${meanTemp.toFixed(2)}°C` +
+            `<br><br> Anzahl Sensoren: ${countMarkersInside}`;
+          }
+          
           updateLegend(content);
         });
 
@@ -150,7 +171,7 @@ export class LeafletMapComponent implements OnInit {
 
         polygon.on('contextmenu', (e) => {
           const clickLocation = e.latlng;
-          const marker = L.marker([clickLocation.lat, clickLocation.lng], {icon: this.createIcon('assets/temperature_new.png')}).addTo(this.map);
+          const marker = L.marker([clickLocation.lat, clickLocation.lng], {icon: this.createIcon('assets/temperature_green.png')}).addTo(this.map);
   
           marker.on('contextmenu', () => {
             this.map.removeLayer(marker);
@@ -165,12 +186,13 @@ export class LeafletMapComponent implements OnInit {
           if (tempValueString !== null && tempValueString.trim() !== "" && !isNaN(Number(tempValueString))) {
               let tempValue: number = Number(tempValueString);
       
-              const marker = L.marker([clickLocation.lat, clickLocation.lng], {icon: this.createIcon('assets/temperature_new.png')}).addTo(this.map);
+              const marker = L.marker([clickLocation.lat, clickLocation.lng], {icon: this.createIcon('assets/temperature_green.png')}).addTo(this.map);
       
               this.markerData.push({
                   lat: clickLocation.lat,
                   lng: clickLocation.lng,
-                  temp: tempValue
+                  temp: tempValue,
+                  activated: true
               });
       
               marker.bindPopup(`Temperatur: ${tempValue}°C`).openTooltip();
@@ -195,8 +217,14 @@ export class LeafletMapComponent implements OnInit {
 
   private getMarkersInsidePolygon(polygon: L.Polygon): any[] {
     return this.markerData.filter(markerData => {
-      return this.isMarkerInsidePolygon(markerData, polygon);
+      return this.isMarkerInsidePolygon(markerData, polygon) && markerData.activated;
     });
+  }
+
+  private countMarkersInsidePolygon(polygon: L.Polygon): number {
+    return this.markerData.filter(markerData => {
+      return this.isMarkerInsidePolygon(markerData, polygon) && markerData.activated;
+    }).length;
   }
 
   private isMarkerInsidePolygon(marker: MarkerData, polygon: L.Polygon): boolean {
@@ -253,13 +281,15 @@ export class LeafletMapComponent implements OnInit {
   
     legend.onAdd = (map) => {
       const div = L.DomUtil.create('div', 'info legend');
-      const temperatureRanges = [0, 5, 10, 15, 20, 25, 30, 35];
-      const colors = ['#313695', '#4575b4', '#74add1', '#abd9e9', '#e0f3f8', '#fee090', '#fdae61', '#f46d43'];
+      const sensorRanges = [0, 1, 2, 3, 4, 5];
+      const colors = ['#ff0000', '#db1200', '#6d4900', '#495b00', '#246e00', '#008000'];
   
-      for (let i = 0; i < temperatureRanges.length; i++) {
-        div.innerHTML +=
-          '<i style="background:' + colors[i] + '"></i> ' +
-          temperatureRanges[i] + (temperatureRanges[i + 1] ? '&ndash;' + temperatureRanges[i + 1] + '°C<br>' : '°C+');
+      for (let i = 0; i < sensorRanges.length; i++) {
+        if (i < sensorRanges.length - 1) {
+          div.innerHTML += '<i style="background:' + colors[i] + '"></i> ' + sensorRanges[i] + '<br>';
+        } else {
+          div.innerHTML += '<i style="background:' + colors[i] + '"></i> ' + sensorRanges[i] + '+';
+        }
       }
   
       return div;
@@ -313,6 +343,20 @@ export class LeafletMapComponent implements OnInit {
 
         const marker = L.marker([data.lat, data.lng], { icon: icon })
             .bindPopup(`Temperatur: ${data.temp}°C`);
+
+        // Adding right-click event listener
+        marker.on('contextmenu', () => {
+            // Find the corresponding MarkerData object and toggle the 'activated' property
+            const markerData = this.markerData.find(md => md.lat === data.lat && md.lng === data.lng);
+            if (markerData) {
+                markerData.activated = !markerData.activated;
+
+                // Change the icon based on the activation state
+                const newIcon = this.createIcon(markerData.activated ? 'assets/temperature.png' : 'assets/temperature_red.png');
+                marker.setIcon(newIcon);
+            }
+        });
+
         marker.addTo(this.map);
         this.markers.push(marker);
     });
@@ -341,31 +385,29 @@ export class LeafletMapComponent implements OnInit {
   }
 
   private fetchTemperatureData(): Observable<number> {
-    const apiUrl = 'http://api.weatherstack.com/current?access_key=37e2da2c2917f40932030c5cbab0d188&query=Wuppertal&units=m'; 
+    const apiUrl = 'http://api.weatherstack.com/current?access_key=b46ba223dfe6adc962f8dc2c94ce7f2a&query=Wuppertal&units=m'; 
     return this.http.get<WeatherApiResponse>(apiUrl).pipe(
         map(data => {
-            if (data && data.current && typeof data.current.temperature === 'number') {
-                return data.current.temperature;
-            } else {
-                throw new Error('Invalid data structure');
-            }
+          if (data && data.current && typeof data.current.temperature === 'number') {
+            return Number(data.current.temperature.toFixed(2));
+          } else {
+            throw new Error('Invalid data structure');
+          }
         }),
         catchError(err => {
             console.error('Error fetching weather data:', err);
             return of(0);
         })
     );
-}
+  }
 
   public getColor(d: number): string {
-    return d >= 35 ? '#f46d43' :
-           d >= 30  ? '#fdae61' :
-           d >= 25  ? '#fee090' :
-           d >= 20  ? '#e0f3f8' :
-           d >= 15   ? '#abd9e9' :
-           d >= 10   ? '#74add1' :
-           d >= 5   ? '#4575b4' :
-                      '#313695';
+    return d >= 5  ? '#008000' :
+           d >= 4  ? '#246e00' :
+           d >= 3   ? '#495b00' :
+           d >= 2   ? '#6d4900' :
+           d >= 1   ? '#db1200' :
+                      '#ff0000';
   }
 
   onResize() {
