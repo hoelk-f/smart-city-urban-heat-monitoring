@@ -16,11 +16,11 @@ import * as L from 'leaflet';
 export class LeafletMapComponent implements OnInit {
   private map!: L.Map;
   private temperatureLegend!: L.Control;
-  private weatherReportTemp: number = 0;
   private temperatureWeatherReportLegend!: L.Control;
   private markers: L.Marker[] = [];
+  
+  private weatherReportTemp: number = 0;
   private temperatureData: any[] = [];
-  private markerData: MarkerData[] = [];
 
   constructor(private http: HttpClient) {}
 
@@ -72,13 +72,6 @@ export class LeafletMapComponent implements OnInit {
                       name: feature.properties.NAME,
                       activated: sensor.activated
                   });
-
-                  this.markerData.push({
-                      temp: temp,
-                      lat: sensor.lat,
-                      lng: sensor.lng,
-                      activated: sensor.activated
-                  });
               }
           });
 
@@ -91,14 +84,6 @@ export class LeafletMapComponent implements OnInit {
     const variation = Math.random() * 4 - 1;
     const result = parseFloat((baseTemp + variation).toFixed(2));
     return result;
-  }
-
-  private updateTemperatureData() {
-    this.temperatureData.forEach(data => {
-      if (data.polygonLayer) {
-        data.polygonLayer.setStyle({ fillColor: this.getColor(data.polygonLayer) });
-      }
-    });
   }
 
   private initializePolygonLayer(): void {
@@ -188,7 +173,7 @@ export class LeafletMapComponent implements OnInit {
       
               const marker = L.marker([clickLocation.lat, clickLocation.lng], {icon: this.createIcon('assets/temperature_green.png')}).addTo(this.map);
       
-              this.markerData.push({
+              this.temperatureData.push({
                   lat: clickLocation.lat,
                   lng: clickLocation.lng,
                   temp: tempValue,
@@ -203,7 +188,7 @@ export class LeafletMapComponent implements OnInit {
       
               marker.on('contextmenu', () => {
                   this.map.removeLayer(marker);
-                  this.markerData = this.markerData.filter(md => md.lat !== clickLocation.lat || md.lng !== clickLocation.lng);
+                  this.temperatureData = this.temperatureData.filter(md => md.lat !== clickLocation.lat || md.lng !== clickLocation.lng);
               });
           } else {
               alert("Please enter a valid temperature value.");
@@ -216,13 +201,13 @@ export class LeafletMapComponent implements OnInit {
   }
 
   private getMarkersInsidePolygon(polygon: L.Polygon): any[] {
-    return this.markerData.filter(markerData => {
+    return this.temperatureData.filter(markerData => {
       return this.isMarkerInsidePolygon(markerData, polygon) && markerData.activated;
     });
   }
 
   private countMarkersInsidePolygon(polygon: L.Polygon): number {
-    return this.markerData.filter(markerData => {
+    return this.temperatureData.filter(markerData => {
       return this.isMarkerInsidePolygon(markerData, polygon) && markerData.activated;
     }).length;
   }
@@ -265,10 +250,10 @@ export class LeafletMapComponent implements OnInit {
   }
 
   private calculateOverallAverageTemperature() {
-    if (this.markerData.length === 0) {
+    if (this.temperatureData.length === 0) {
         return 0;
     }
-    return this.markerData.reduce((sum, marker) => sum + marker.temp, 0) / this.markerData.length;
+    return this.temperatureData.reduce((sum, marker) => sum + marker.temp, 0) / this.temperatureData.length;
   }
 
   private updateTemperatureLegend(averageTemp: number) {
@@ -329,7 +314,11 @@ export class LeafletMapComponent implements OnInit {
     descriptionLegend.onAdd = function (map) {
       const div = L.DomUtil.create('div', 'info description-legend');
       div.innerHTML = `<h4>Digitaler Schatten</h4>
-      <p>Der digitale Schatten bezeichnet die digitale Spur, <br>die wir durch unsere Interaktionen mit verschiedenen <br> Technologien hinterlassen. <br><br>Diese Spuren, die von Online-Aktivitäten, <br> Standortdaten bis hin zu Sensordaten reichen, <br>bieten Einblicke in Verhaltensmuster und Präferenzen, <br>sind aber auch eng mit Datenschutzfragen verknüpft.</p>`;
+        <p>Der digitale Schatten ist die digitale Abbildung <br>
+        der von virtuellen Sensoren erfassten Daten, <br>
+        wie Temperaturwerte und Zeitstempel, die eine <br>
+        genaue Überwachung und Analyse in der <br>
+        physischen Welt ermöglicht.</p>`;
       return div;
     };
   
@@ -344,14 +333,11 @@ export class LeafletMapComponent implements OnInit {
         const marker = L.marker([data.lat, data.lng], { icon: icon })
             .bindPopup(`Temperatur: ${data.temp}°C`);
 
-        // Adding right-click event listener
         marker.on('contextmenu', () => {
-            // Find the corresponding MarkerData object and toggle the 'activated' property
-            const markerData = this.markerData.find(md => md.lat === data.lat && md.lng === data.lng);
+            const markerData = this.temperatureData.find(md => md.lat === data.lat && md.lng === data.lng);
             if (markerData) {
                 markerData.activated = !markerData.activated;
 
-                // Change the icon based on the activation state
                 const newIcon = this.createIcon(markerData.activated ? 'assets/temperature.png' : 'assets/temperature_red.png');
                 marker.setIcon(newIcon);
             }
@@ -359,13 +345,6 @@ export class LeafletMapComponent implements OnInit {
 
         marker.addTo(this.map);
         this.markers.push(marker);
-    });
-  }
-
-  private updateMarkers() {
-    this.markers.forEach((marker, index) => {
-      const temp = this.temperatureData[index].temp;
-      marker.setPopupContent(`Temperatur: ${temp.toFixed(2)}°C`);
     });
   }
 
