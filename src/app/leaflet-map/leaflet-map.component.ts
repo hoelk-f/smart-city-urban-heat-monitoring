@@ -1,10 +1,11 @@
-import { HttpClient } from '@angular/common/http';
-import { Component, OnInit } from '@angular/core';
-import { Observable, of } from 'rxjs';
-import { catchError, map } from 'rxjs/operators';
-import { WeatherApiResponse } from '../interface/WeatherApiResponse'; 
-import { MarkerData } from '../interface/MarkerData';
 import * as L from 'leaflet';
+import { Component, OnInit } from '@angular/core';
+import { HttpClient } from '@angular/common/http';
+import { MarkerData } from '../interface/MarkerData';
+import { Observable, of } from 'rxjs';
+import { WeatherApiResponse } from '../interface/WeatherApiResponse'; 
+import { catchError, map } from 'rxjs/operators';
+
 
 @Component({
   selector: 'app-leaflet-map',
