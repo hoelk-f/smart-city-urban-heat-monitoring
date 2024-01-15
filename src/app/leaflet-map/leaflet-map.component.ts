@@ -157,7 +157,7 @@ export class LeafletMapComponent implements OnInit {
 
         polygon.on('contextmenu', (e) => {
           const clickLocation = e.latlng;
-          const marker = L.marker([clickLocation.lat, clickLocation.lng], {icon: this.createIcon('assets/temperature_green.png')}).addTo(this.map);
+          const marker = L.marker([clickLocation.lat, clickLocation.lng], {icon: this.createIcon('assets/temperature.png')}).addTo(this.map);
   
           marker.on('contextmenu', () => {
             this.map.removeLayer(marker);
@@ -172,7 +172,7 @@ export class LeafletMapComponent implements OnInit {
           if (tempValueString !== null && tempValueString.trim() !== "" && !isNaN(Number(tempValueString))) {
               let tempValue: number = Number(tempValueString);
       
-              const marker = L.marker([clickLocation.lat, clickLocation.lng], {icon: this.createIcon('assets/temperature_green.png')}).addTo(this.map);
+              const marker = L.marker([clickLocation.lat, clickLocation.lng], {icon: this.createIcon('assets/temperature.png')}).addTo(this.map);
       
               this.temperatureData.push({
                   lat: clickLocation.lat,
@@ -267,6 +267,7 @@ export class LeafletMapComponent implements OnInit {
   
     legend.onAdd = (map) => {
       const div = L.DomUtil.create('div', 'info legend');
+      div.innerHTML = '<h4>Anzahl der Sensoren</h4>';
       const sensorRanges = [0, 1, 2, 3, 4, 5];
       const colors = ['#ff0000', '#db1200', '#6d4900', '#495b00', '#246e00', '#008000'];
   
@@ -329,7 +330,7 @@ export class LeafletMapComponent implements OnInit {
   private createMarkers() {
     this.markers = [];
     this.temperatureData.forEach((data) => {
-        const icon = this.createIcon('assets/temperature.png');
+        const icon = this.createIcon('assets/stationary_sensor.png');
 
         const marker = L.marker([data.lat, data.lng], { icon: icon })
             .bindPopup(`Temperatur: ${data.temp}°C`);
@@ -339,7 +340,7 @@ export class LeafletMapComponent implements OnInit {
             if (markerData) {
                 markerData.activated = !markerData.activated;
 
-                const newIcon = this.createIcon(markerData.activated ? 'assets/temperature.png' : 'assets/temperature_red.png');
+                const newIcon = this.createIcon(markerData.activated ? 'assets/stationary_sensor.png' : 'assets/stationary_sensor_disabled.png');
                 marker.setIcon(newIcon);
             }
         });
@@ -354,8 +355,8 @@ export class LeafletMapComponent implements OnInit {
   
     return L.icon({
       iconUrl: iconUrl,
-      iconSize: [15, 30],
-      iconAnchor: [0, 30],
+      iconSize: [25, 28],
+      iconAnchor: [5, 30],
       popupAnchor: [7, -30]
     });
   }
