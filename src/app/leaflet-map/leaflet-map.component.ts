@@ -157,7 +157,7 @@ export class LeafletMapComponent implements OnInit {
 
         polygon.on('contextmenu', (e) => {
           const clickLocation = e.latlng;
-          const marker = L.marker([clickLocation.lat, clickLocation.lng], {icon: this.createIcon('assets/temperature.png')}).addTo(this.map);
+          const marker = L.marker([clickLocation.lat, clickLocation.lng], {icon: this.createIconDynamic('assets/temperature.png')}).addTo(this.map);
   
           marker.on('contextmenu', () => {
             this.map.removeLayer(marker);
@@ -172,7 +172,7 @@ export class LeafletMapComponent implements OnInit {
           if (tempValueString !== null && tempValueString.trim() !== "" && !isNaN(Number(tempValueString))) {
               let tempValue: number = Number(tempValueString);
       
-              const marker = L.marker([clickLocation.lat, clickLocation.lng], {icon: this.createIcon('assets/temperature.png')}).addTo(this.map);
+              const marker = L.marker([clickLocation.lat, clickLocation.lng], {icon: this.createIconDynamic('assets/temperature.png')}).addTo(this.map);
       
               this.temperatureData.push({
                   lat: clickLocation.lat,
@@ -330,7 +330,7 @@ export class LeafletMapComponent implements OnInit {
   private createMarkers() {
     this.markers = [];
     this.temperatureData.forEach((data) => {
-        const icon = this.createIcon('assets/stationary_sensor.png');
+        const icon = this.createIconStatic('assets/stationary_sensor.png');
 
         const marker = L.marker([data.lat, data.lng], { icon: icon })
             .bindPopup(`Temperatur: ${data.temp}°C`);
@@ -340,7 +340,7 @@ export class LeafletMapComponent implements OnInit {
             if (markerData) {
                 markerData.activated = !markerData.activated;
 
-                const newIcon = this.createIcon(markerData.activated ? 'assets/stationary_sensor.png' : 'assets/stationary_sensor_disabled.png');
+                const newIcon = this.createIconStatic(markerData.activated ? 'assets/stationary_sensor.png' : 'assets/stationary_sensor_disabled.png');
                 marker.setIcon(newIcon);
             }
         });
@@ -350,12 +350,23 @@ export class LeafletMapComponent implements OnInit {
     });
   }
 
-  private createIcon(path: string): L.Icon {
+  private createIconStatic(path: string): L.Icon {
     const iconUrl = path;
   
     return L.icon({
       iconUrl: iconUrl,
-      iconSize: [25, 28],
+      iconSize: [25, 22],
+      iconAnchor: [5, 30],
+      popupAnchor: [7, -30]
+    });
+  }
+
+  private createIconDynamic(path: string): L.Icon {
+    const iconUrl = path;
+  
+    return L.icon({
+      iconUrl: iconUrl,
+      iconSize: [15, 30],
       iconAnchor: [5, 30],
       popupAnchor: [7, -30]
     });
