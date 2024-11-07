@@ -1,0 +1,17 @@
+# Dockerfile.python
+
+# Step 1: Use Python 3.9-slim for running the Python script
+FROM python:3.9-slim
+
+# Set working directory inside the final container
+WORKDIR /app
+
+# Install necessary Python packages
+RUN pip install pandas numpy requests
+
+# Copy the Python script and CSV files
+COPY ./src/assets/fetch_weatherdata.py /app/src/assets/fetch_weatherdata.py
+COPY ./src/assets/sensors.csv /app/src/assets/sensors.csv
+
+# Run the Python script
+CMD ["python", "-u", "/app/src/assets/fetch_weatherdata.py"]

@@ -2,10 +2,9 @@ import * as L from 'leaflet';
 import { Component, OnInit } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { MarkerData } from '../interface/MarkerData';
+import { switchMap } from 'rxjs/operators';
 import { Observable, of } from 'rxjs';
-import { WeatherApiResponse } from '../interface/WeatherApiResponse'; 
 import { catchError, map } from 'rxjs/operators';
-
 
 @Component({
   selector: 'app-leaflet-map',
@@ -13,14 +12,13 @@ import { catchError, map } from 'rxjs/operators';
   styleUrls: ['./leaflet-map.component.css'],
   standalone: true
 })
-
 export class LeafletMapComponent implements OnInit {
   private map!: L.Map;
   private temperatureLegend!: L.Control;
   private temperatureWeatherReportLegend!: L.Control;
   private markers: L.Marker[] = [];
   
-  private weatherReportTemp: number = 0;
+  private weatherReportTemp: number = 18; // Assuming a default temperature
   private temperatureData: any[] = [];
 
   constructor(private http: HttpClient) {}
@@ -34,18 +32,15 @@ export class LeafletMapComponent implements OnInit {
           attribution: '© OpenStreetMap contributors'
         }).addTo(this.map);
 
-        this.fetchTemperatureData().subscribe(data => {
-          this.weatherReportTemp = data;
-        });
-
-        const averageTemp = this.temperatureData.reduce((sum, data) => sum + data.temp, 0) / this.temperatureData.length;
-        this.addTemperatureLegend(averageTemp);
         this.initializeTemperatureData();
         this.addLegend();
         this.addDigitalShadowLegend();
-        this.createMarkers();
+
+        // Initialize the Wetterbericht legend
+        this.initializeWeatherReportLegend(this.weatherReportTemp);
       });
       
+      // Update the average temperature legend periodically
       setInterval(() => {
         const averageTemp = this.calculateOverallAverageTemperature();
         this.updateTemperatureLegend(averageTemp);
@@ -54,48 +49,133 @@ export class LeafletMapComponent implements OnInit {
   }
 
   private initializeTemperatureData() {
-    
-      this.initializeWeatherReportLegend(this.weatherReportTemp);
+    // Load the JSON file for polygons and map geometry
+    this.http.get<any>('assets/modified_wuppertal_quartiere.json').subscribe(jsonData => {
+      // Load sensor data from CSV
+      this.fetchCsvData().subscribe(csvData => {
+        this.temperatureData = [];
 
-      this.http.get<any>('assets/modified_wuppertal_quartiere.json').subscribe(data => {
-          this.temperatureData = [];
+        jsonData.features.forEach((feature: any) => {
+          const quartier = feature.properties.QUARTIER;
 
-          data.features.forEach((feature: any) => {
-              if (feature.properties.sensors && feature.properties.sensors.length > 0) {
-                  let sensor = feature.properties.sensors[0];
-                  let temp = this.randomizeTemperature(this.weatherReportTemp);
+          // Find corresponding sensor data in CSV
+          const sensorData = csvData.find(data => data.quartier == quartier);
 
-                  this.temperatureData.push({
-                      temp: temp,
-                      lat: sensor.lat,
-                      lng: sensor.lng,
-                      coordinates: feature.geometry.coordinates,
-                      name: feature.properties.NAME,
-                      activated: sensor.activated
-                  });
-              }
-          });
+          if (sensorData) {
+            this.temperatureData.push({
+              temp: sensorData.temp_with_noise,
+              lat: sensorData.lat,
+              lng: sensorData.lng,
+              coordinates: feature.geometry.coordinates,
+              name: feature.properties.NAME,
+              activated: sensorData.activated
+            });
+          }
+        });
 
-          this.createMarkers();
-          this.initializePolygonLayer();
+        this.createMarkers();
+        this.initializePolygonLayer();
       });
+    });
+
+    // Periodically update data from CSV
+    setInterval(() => {
+      this.fetchCsvData().subscribe(updatedData => {
+        // Update temperatureData with new CSV data
+        updatedData.forEach(sensorData => {
+          const dataIndex = this.temperatureData.findIndex(
+            td => td.lat == sensorData.lat && td.lng == sensorData.lng
+          );
+
+          if (dataIndex >= 0) {
+            this.temperatureData[dataIndex].temp = sensorData.temp_with_noise;
+            this.temperatureData[dataIndex].activated = sensorData.activated;
+          }
+        });
+
+        this.updateMarkers(); // Update existing markers with new data
+        const averageTemp = this.calculateOverallAverageTemperature();
+        this.updateTemperatureLegend(averageTemp);
+      });
+    }, 5000); // Adjust interval as needed
   }
 
-  private randomizeTemperature(baseTemp: number): number {
-    const variation = Math.random() * 4 - 1;
-    const result = parseFloat((baseTemp + variation).toFixed(2));
-    return result;
+  private updateMarkers() {
+    this.temperatureData.forEach((data, index) => {
+      if (this.markers[index]) {
+        const marker = this.markers[index];
+        const popupContent = `Temperatur: ${data.temp}°C`;
+        marker.setLatLng([data.lat, data.lng]);
+        marker.getPopup()?.setContent(popupContent);
+
+        // Update marker icon based on activation status
+        const iconPath = data.activated ? 'assets/stationary_sensor.png' : 'assets/stationary_sensor_disabled.png';
+        marker.setIcon(this.createIconStatic(iconPath));
+      }
+    });
+  }  
+
+  private fetchCsvData(): Observable<any[]> {
+    const sensor1$ = this.http.get('assets/sensor_1.csv', { responseType: 'text' }).pipe(
+      map(data => this.parseCsvData(data)),
+      catchError(err => {
+        console.error('Error reading sensor_1 CSV data:', err);
+        return of([]);
+      })
+    );
+  
+    const sensor2$ = this.http.get('assets/sensor_2.csv', { responseType: 'text' }).pipe(
+      map(data => this.parseCsvData(data)),
+      catchError(err => {
+        console.error('Error reading sensor_2 CSV data:', err);
+        return of([]);
+      })
+    );
+  
+    // Combine both observables and merge the results
+    return sensor1$.pipe(
+      map(sensor1Data => {
+        return sensor2$.pipe(
+          map(sensor2Data => {
+            // Concatenate the data from both CSV files
+            return [...sensor1Data, ...sensor2Data];
+          })
+        );
+      }),
+      // Flatten the nested observables into a single observable stream
+      switchMap(data => data)
+    );
   }
+  
+  private parseCsvData(data: string): any[] {
+    // Normalize line endings and parse CSV rows
+    const rows = data.replace(/\r\n/g, '\n').split('\n').slice(1); // Skip header row
+    return rows
+      .filter(row => row.trim() !== '') // Remove empty rows
+      .map(row => {
+        const [quartier, lat, lng, temp, activated, temp_with_noise] = row.split(',').map(cell => cell.trim());
+        return {
+          quartier: quartier,
+          lat: parseFloat(lat),
+          lng: parseFloat(lng),
+          temp: parseFloat(temp),
+          activated: activated.toLowerCase() === 'true',
+          temp_with_noise: parseFloat(temp_with_noise)
+        };
+      });
+  }  
 
   private initializePolygonLayer(): void {
     this.temperatureData.forEach(data => {
       if (data.coordinates) {
-        
         const polygon = L.polygon(data.coordinates, {
           fillColor: this.getColor(1), 
           fillOpacity: 0.4, 
-          color: "white"})
-        .addTo(this.map);
+          color: "white"
+        }).addTo(this.map);
+
+        // Bind an empty tooltip to the polygon
+        polygon.bindTooltip('', { sticky: true, className: 'polygon-tooltip' });
 
         const resetStyle = () => {
           polygon.setStyle({
@@ -111,89 +191,38 @@ export class LeafletMapComponent implements OnInit {
           });
         };
 
-        const updateLegend = (content: string) => {
-          const legendDiv = document.getElementById('info-legend');
-          if (legendDiv) {
-            legendDiv.innerHTML = content;
-            legendDiv.style.display = 'block';
-          }
-        };
-
         polygon.on('mouseover', (e) => {
           highlightPolygon();
           const markersInside = this.getMarkersInsidePolygon(polygon);
           const meanTemp = this.calculateMeanTemperature(markersInside);
-          var countMarkersInside = this.countMarkersInsidePolygon(polygon);
-          
-          
-          var content = '';
-          if(countMarkersInside == 0)
-          {
+          const countMarkersInside = this.countMarkersInsidePolygon(polygon);
+
+          let content = '';
+          if (countMarkersInside == 0) {
             content = 
-            `<strong>${data.name}</strong>` +
-            `<br><br><img src="assets/weather.png" alt="Description" style="width:14px; height:15px;"> Temperatur: ${this.weatherReportTemp}°C` +
-            `<br><br> Anzahl Sensoren: ${countMarkersInside}`;
-          }
-          else {
+              `<strong>${data.name}</strong>` +
+              `<br><br><img src="assets/weather.png" alt="Description" style="width:14px; height:15px;"> Temperatur: ${this.weatherReportTemp}°C` +
+              `<br><br> Anzahl Sensoren: ${countMarkersInside}`;
+          } else {
             content = 
-            `<strong>${data.name}</strong>` +
-            `<br><br><img src="assets/sensor.png" alt="Description" style="width:14px; height:15px;"> ⌀ Temperatur: ${meanTemp.toFixed(2)}°C` +
-            `<br><br> Anzahl Sensoren: ${countMarkersInside}`;
+              `<strong>${data.name}</strong>` +
+              `<br><br><img src="assets/sensor.png" alt="Description" style="width:14px; height:15px;"> ⌀ Temperatur: ${meanTemp.toFixed(2)}°C` +
+              `<br><br> Anzahl Sensoren: ${countMarkersInside}`;
           }
-          
-          updateLegend(content);
+
+          // Update the tooltip content and open it at the mouse position
+          polygon.setTooltipContent(content);
+          polygon.openTooltip(e.latlng);
         });
 
         polygon.on('mouseout', (e) => {
           resetStyle();
-          updateLegend('');
-          document.getElementById('info-legend')!.style.display = 'none';
+          polygon.closeTooltip();
         });
 
         polygon.on('click', (e) => {
           const bounds = polygon.getBounds();
           this.map.fitBounds(bounds);
-        });
-
-        polygon.on('contextmenu', (e) => {
-          const clickLocation = e.latlng;
-          const marker = L.marker([clickLocation.lat, clickLocation.lng], {icon: this.createIconDynamic('assets/temperature.png')}).addTo(this.map);
-  
-          marker.on('contextmenu', () => {
-            this.map.removeLayer(marker);
-          });
-        });
-
-        polygon.on('contextmenu', (e) => {
-          const clickLocation = e.latlng;
-      
-          let tempValueString: string | null = prompt("Please enter the temperature value:", "");
-      
-          if (tempValueString !== null && tempValueString.trim() !== "" && !isNaN(Number(tempValueString))) {
-              let tempValue: number = Number(tempValueString);
-      
-              const marker = L.marker([clickLocation.lat, clickLocation.lng], {icon: this.createIconDynamic('assets/temperature.png')}).addTo(this.map);
-      
-              this.temperatureData.push({
-                  lat: clickLocation.lat,
-                  lng: clickLocation.lng,
-                  temp: tempValue,
-                  activated: true
-              });
-      
-              marker.bindPopup(`Temperatur: ${tempValue}°C`).openTooltip();
-      
-              marker.on('click', () => {
-                  marker.openTooltip();
-              });
-      
-              marker.on('contextmenu', () => {
-                  this.map.removeLayer(marker);
-                  this.temperatureData = this.temperatureData.filter(md => md.lat !== clickLocation.lat || md.lng !== clickLocation.lng);
-              });
-          } else {
-              alert("Please enter a valid temperature value.");
-          }
         });
 
         data.polygonLayer = polygon;
@@ -258,7 +287,9 @@ export class LeafletMapComponent implements OnInit {
   }
 
   private updateTemperatureLegend(averageTemp: number) {
-    this.map.removeControl(this.temperatureLegend);
+    if (this.temperatureLegend) {
+      this.map.removeControl(this.temperatureLegend);
+    }
     this.addTemperatureLegend(averageTemp);
   }
 
@@ -287,27 +318,12 @@ export class LeafletMapComponent implements OnInit {
 
   private addTemperatureLegend(averageTemp: number) {
     this.temperatureLegend = new L.Control({ position: 'topright' });
-    this.temperatureLegend.onAdd = function (map) {
+    this.temperatureLegend.onAdd = (map) => {
       const div = L.DomUtil.create('div', 'info legend');
       div.innerHTML = `<h4>⌀ Temperatur</h4>${averageTemp.toFixed(2)} °C`;
       return div;
     };
     this.temperatureLegend.addTo(this.map);
-  }
-
-  private addTemperatureWeatherReportLegend(temperature: number) {
-    if (this.temperatureWeatherReportLegend) {
-      this.map.removeControl(this.temperatureWeatherReportLegend);
-    }
-    this.temperatureWeatherReportLegend = new L.Control({ position: 'topright' });
-
-    this.temperatureWeatherReportLegend.onAdd = function (map) {
-      const div = L.DomUtil.create('div', 'info temperature-legend');
-      div.innerHTML = `<h4>Wetterbericht</h4>${temperature.toFixed(2)} °C`;
-      return div;
-    };
-
-    this.temperatureWeatherReportLegend.addTo(this.map);
   }
 
   private addDigitalShadowLegend() {
@@ -330,43 +346,32 @@ export class LeafletMapComponent implements OnInit {
   private createMarkers() {
     this.markers = [];
     this.temperatureData.forEach((data) => {
-        const icon = this.createIconStatic('assets/stationary_sensor.png');
+      const iconPath = data.activated ? 'assets/stationary_sensor.png' : 'assets/stationary_sensor_disabled.png';
+      const icon = this.createIconStatic(iconPath);
 
-        const marker = L.marker([data.lat, data.lng], { icon: icon })
-            .bindPopup(`Temperatur: ${data.temp}°C`);
+      const marker = L.marker([data.lat, data.lng], { icon: icon })
+          .bindPopup(`Temperatur: ${data.temp}°C`);
 
-        marker.on('contextmenu', () => {
-            const markerData = this.temperatureData.find(md => md.lat === data.lat && md.lng === data.lng);
-            if (markerData) {
-                markerData.activated = !markerData.activated;
+      marker.on('contextmenu', () => {
+        const markerData = this.temperatureData.find(md => md.lat === data.lat && md.lng === data.lng);
+        if (markerData) {
+          markerData.activated = !markerData.activated;
 
-                const newIcon = this.createIconStatic(markerData.activated ? 'assets/stationary_sensor.png' : 'assets/stationary_sensor_disabled.png');
-                marker.setIcon(newIcon);
-            }
-        });
+          const newIconPath = markerData.activated ? 'assets/stationary_sensor.png' : 'assets/stationary_sensor_disabled.png';
+          const newIcon = this.createIconStatic(newIconPath);
+          marker.setIcon(newIcon);
+        }
+      });
 
-        marker.addTo(this.map);
-        this.markers.push(marker);
+      marker.addTo(this.map);
+      this.markers.push(marker);
     });
   }
 
   private createIconStatic(path: string): L.Icon {
-    const iconUrl = path;
-  
     return L.icon({
-      iconUrl: iconUrl,
+      iconUrl: path,
       iconSize: [25, 22],
-      iconAnchor: [5, 30],
-      popupAnchor: [7, -30]
-    });
-  }
-
-  private createIconDynamic(path: string): L.Icon {
-    const iconUrl = path;
-  
-    return L.icon({
-      iconUrl: iconUrl,
-      iconSize: [15, 30],
       iconAnchor: [5, 30],
       popupAnchor: [7, -30]
     });
@@ -376,21 +381,19 @@ export class LeafletMapComponent implements OnInit {
     this.addTemperatureWeatherReportLegend(temperature);
   }
 
-  private fetchTemperatureData(): Observable<number> {
-    const apiUrl = 'http://api.weatherstack.com/current?access_key=b46ba223dfe6adc962f8dc2c94ce7f2a&query=Wuppertal&units=m'; 
-    return this.http.get<WeatherApiResponse>(apiUrl).pipe(
-        map(data => {
-          if (data && data.current && typeof data.current.temperature === 'number') {
-            return Number(data.current.temperature.toFixed(2));
-          } else {
-            throw new Error('Invalid data structure');
-          }
-        }),
-        catchError(err => {
-            console.error('Error fetching weather data:', err);
-            return of(0);
-        })
-    );
+  private addTemperatureWeatherReportLegend(temperature: number) {
+    if (this.temperatureWeatherReportLegend) {
+      this.map.removeControl(this.temperatureWeatherReportLegend);
+    }
+    this.temperatureWeatherReportLegend = new L.Control({ position: 'topright' });
+
+    this.temperatureWeatherReportLegend.onAdd = (map) => {
+      const div = L.DomUtil.create('div', 'info temperature-weather-legend');
+      div.innerHTML = `<h4>Wetterbericht</h4>${temperature.toFixed(2)} °C`;
+      return div;
+    };
+
+    this.temperatureWeatherReportLegend.addTo(this.map);
   }
 
   public getColor(d: number): string {
