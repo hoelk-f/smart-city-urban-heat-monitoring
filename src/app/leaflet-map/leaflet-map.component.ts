@@ -2,9 +2,8 @@ import * as L from 'leaflet';
 import { Component, OnInit } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { MarkerData } from '../interface/MarkerData';
-import { switchMap } from 'rxjs/operators';
 import { Observable, of } from 'rxjs';
-import { catchError, map } from 'rxjs/operators';
+import { catchError, map, switchMap } from 'rxjs/operators';
 
 @Component({
   selector: 'app-leaflet-map',
@@ -18,7 +17,7 @@ export class LeafletMapComponent implements OnInit {
   private temperatureWeatherReportLegend!: L.Control;
   private markers: L.Marker[] = [];
   
-  private weatherReportTemp: number = 18; // Assuming a default temperature
+  private weatherReportTemp: number = 18;
   private temperatureData: any[] = [];
 
   constructor(private http: HttpClient) {}
@@ -35,12 +34,17 @@ export class LeafletMapComponent implements OnInit {
         this.initializeTemperatureData();
         this.addLegend();
         this.addDigitalShadowLegend();
+        this.addAvgTemperatureLegend();
+        this.addLogoLegend();
 
-        // Initialize the Wetterbericht legend
-        this.initializeWeatherReportLegend(this.weatherReportTemp);
+        this.map.on('contextmenu', (e: L.LeafletMouseEvent) => {
+          e.originalEvent.preventDefault();
+          this.addSensorAtLocation(e.latlng);
+        });
+
+        this.fetchWeatherReportTemperature();
       });
       
-      // Update the average temperature legend periodically
       setInterval(() => {
         const averageTemp = this.calculateOverallAverageTemperature();
         this.updateTemperatureLegend(averageTemp);
@@ -48,17 +52,75 @@ export class LeafletMapComponent implements OnInit {
     }
   }
 
+  private addSensorAtLocation(latlng: L.LatLng): void {
+    let tempValueString: string | null = prompt("Please enter the temperature value:", "");
+
+    if (tempValueString !== null && tempValueString.trim() !== "" && !isNaN(Number(tempValueString))) {
+      const tempValue: number = Number(tempValueString);
+      const marker = L.marker(latlng, {icon: this.createIconStatic('assets/temperature.png')}).addTo(this.map);
+      
+      this.temperatureData.push({
+        lat: latlng.lat,
+        lng: latlng.lng,
+        temp: tempValue,
+        activated: true
+      });
+
+      marker.bindPopup(`Temperatur: ${tempValue}°C`).openTooltip();
+
+      marker.on('contextmenu', () => {
+        this.map.removeLayer(marker);
+        this.temperatureData = this.temperatureData.filter(md => md.lat !== latlng.lat || md.lng !== latlng.lng);
+      });
+    } else {
+      alert("Please enter a valid temperature value.");
+    }
+  }
+
+  private fetchWeatherReportTemperature(): void {
+    this.http.get('assets/weatherreportapi.csv', { responseType: 'text' }).subscribe(
+      (data) => {
+        const rows = data.split('\n');
+        if (rows.length > 1) {
+          const [timestamp, temperature] = rows[1].split(',');
+          this.weatherReportTemp = parseFloat(temperature);
+        } else {
+          console.error('No data found in weatherreportapi.csv');
+        }
+        this.updateWeatherReportLegend();
+      },
+      (error) => {
+        console.error('Error loading weather report CSV:', error);
+      }
+    );
+  }
+
+  private updateWeatherReportLegend(): void {
+    if (this.temperatureWeatherReportLegend) {
+      this.map.removeControl(this.temperatureWeatherReportLegend);
+    }
+    this.addTemperatureWeatherReportLegend(this.weatherReportTemp);
+  }
+
+  private addTemperatureWeatherReportLegend(temperature: number) {
+    this.temperatureWeatherReportLegend = new L.Control({ position: 'topright' });
+
+    this.temperatureWeatherReportLegend.onAdd = (map) => {
+      const div = L.DomUtil.create('div', 'info legend');
+      div.innerHTML = `<h6>Wetterbericht</h6>${temperature.toFixed(2)} °C`;
+      return div;
+    };
+
+    this.temperatureWeatherReportLegend.addTo(this.map);
+  }
+
   private initializeTemperatureData() {
-    // Load the JSON file for polygons and map geometry
     this.http.get<any>('assets/modified_wuppertal_quartiere.json').subscribe(jsonData => {
-      // Load sensor data from CSV
       this.fetchCsvData().subscribe(csvData => {
         this.temperatureData = [];
 
         jsonData.features.forEach((feature: any) => {
           const quartier = feature.properties.QUARTIER;
-
-          // Find corresponding sensor data in CSV
           const sensorData = csvData.find(data => data.quartier == quartier);
 
           if (sensorData) {
@@ -78,10 +140,8 @@ export class LeafletMapComponent implements OnInit {
       });
     });
 
-    // Periodically update data from CSV
     setInterval(() => {
       this.fetchCsvData().subscribe(updatedData => {
-        // Update temperatureData with new CSV data
         updatedData.forEach(sensorData => {
           const dataIndex = this.temperatureData.findIndex(
             td => td.lat == sensorData.lat && td.lng == sensorData.lng
@@ -93,11 +153,11 @@ export class LeafletMapComponent implements OnInit {
           }
         });
 
-        this.updateMarkers(); // Update existing markers with new data
+        this.updateMarkers();
         const averageTemp = this.calculateOverallAverageTemperature();
         this.updateTemperatureLegend(averageTemp);
       });
-    }, 5000); // Adjust interval as needed
+    }, 5000);
   }
 
   private updateMarkers() {
@@ -108,7 +168,6 @@ export class LeafletMapComponent implements OnInit {
         marker.setLatLng([data.lat, data.lng]);
         marker.getPopup()?.setContent(popupContent);
 
-        // Update marker icon based on activation status
         const iconPath = data.activated ? 'assets/stationary_sensor.png' : 'assets/stationary_sensor_disabled.png';
         marker.setIcon(this.createIconStatic(iconPath));
       }
@@ -132,26 +191,22 @@ export class LeafletMapComponent implements OnInit {
       })
     );
   
-    // Combine both observables and merge the results
     return sensor1$.pipe(
       map(sensor1Data => {
         return sensor2$.pipe(
           map(sensor2Data => {
-            // Concatenate the data from both CSV files
             return [...sensor1Data, ...sensor2Data];
           })
         );
       }),
-      // Flatten the nested observables into a single observable stream
       switchMap(data => data)
     );
   }
   
   private parseCsvData(data: string): any[] {
-    // Normalize line endings and parse CSV rows
-    const rows = data.replace(/\r\n/g, '\n').split('\n').slice(1); // Skip header row
+    const rows = data.replace(/\r\n/g, '\n').split('\n').slice(1);
     return rows
-      .filter(row => row.trim() !== '') // Remove empty rows
+      .filter(row => row.trim() !== '')
       .map(row => {
         const [quartier, lat, lng, temp, activated, temp_with_noise] = row.split(',').map(cell => cell.trim());
         return {
@@ -168,37 +223,53 @@ export class LeafletMapComponent implements OnInit {
   private initializePolygonLayer(): void {
     this.temperatureData.forEach(data => {
       if (data.coordinates) {
+        
         const polygon = L.polygon(data.coordinates, {
-          fillColor: this.getColor(1), 
-          fillOpacity: 0.4, 
-          color: "white"
+          fillColor: this.getColorByAvgTemp(0), // Initial fill color based on placeholder avg temperature
+          fillOpacity: 0.4,
+          color: this.getColor(1), // Initial border color
+          weight: 2
         }).addTo(this.map);
-
-        // Bind an empty tooltip to the polygon
-        polygon.bindTooltip('', { sticky: true, className: 'polygon-tooltip' });
-
-        const resetStyle = () => {
+  
+        const updatePolygonStyle = () => {
+          const markersInside = this.getMarkersInsidePolygon(polygon);
+          const meanTemp = this.calculateMeanTemperature(markersInside);
+          const tempDiff = Math.abs(meanTemp - this.weatherReportTemp);
           polygon.setStyle({
-            fillColor: this.getColor(this.countMarkersInsidePolygon(polygon)),
+            fillColor: this.getColorByAvgTemp(meanTemp), // Fill color based on AVG temp
+            color: this.getColor(tempDiff), // Border color based on temperature difference
             fillOpacity: 0.4
           });
         };
-
+  
         const highlightPolygon = () => {
           polygon.setStyle({
-            fillColor: this.getColor(this.countMarkersInsidePolygon(polygon)),
             fillOpacity: 0.7
           });
         };
-
+  
+        const resetPolygonStyle = () => {
+          polygon.setStyle({
+            fillOpacity: 0.4
+          });
+        };
+  
+        const updateLegend = (content: string) => {
+          const legendDiv = document.getElementById('info-legend');
+          if (legendDiv) {
+            legendDiv.innerHTML = content;
+            legendDiv.style.display = 'block';
+          }
+        };
+  
         polygon.on('mouseover', (e) => {
           highlightPolygon();
           const markersInside = this.getMarkersInsidePolygon(polygon);
           const meanTemp = this.calculateMeanTemperature(markersInside);
           const countMarkersInside = this.countMarkersInsidePolygon(polygon);
-
+  
           let content = '';
-          if (countMarkersInside == 0) {
+          if (countMarkersInside === 0) {
             content = 
               `<strong>${data.name}</strong>` +
               `<br><br><img src="assets/weather.png" alt="Description" style="width:14px; height:15px;"> Temperatur: ${this.weatherReportTemp}°C` +
@@ -209,25 +280,77 @@ export class LeafletMapComponent implements OnInit {
               `<br><br><img src="assets/sensor.png" alt="Description" style="width:14px; height:15px;"> ⌀ Temperatur: ${meanTemp.toFixed(2)}°C` +
               `<br><br> Anzahl Sensoren: ${countMarkersInside}`;
           }
-
-          // Update the tooltip content and open it at the mouse position
-          polygon.setTooltipContent(content);
-          polygon.openTooltip(e.latlng);
+  
+          updateLegend(content);
         });
-
+  
         polygon.on('mouseout', (e) => {
-          resetStyle();
-          polygon.closeTooltip();
+          resetPolygonStyle();
+          updateLegend('');
+          const legendDiv = document.getElementById('info-legend');
+          if (legendDiv) {
+            legendDiv.style.display = 'none';
+          }
         });
-
+  
         polygon.on('click', (e) => {
           const bounds = polygon.getBounds();
           this.map.fitBounds(bounds);
         });
-
+  
         data.polygonLayer = polygon;
+  
+        updatePolygonStyle(); // Initial color update
       }
     });
+  
+    // Periodically update the color and border of each polygon
+    setInterval(() => {
+      this.temperatureData.forEach(data => {
+        if (data.polygonLayer) {
+          const markersInside = this.getMarkersInsidePolygon(data.polygonLayer);
+          const meanTemp = this.calculateMeanTemperature(markersInside);
+          const tempDiff = Math.abs(meanTemp - this.weatherReportTemp);
+          data.polygonLayer.setStyle({
+            fillColor: this.getColorByAvgTemp(meanTemp), // Update fill color based on AVG temp
+            color: this.getColor(tempDiff) // Update border color based on temperature difference
+          });
+        }
+      });
+    }, 5000);
+  }
+
+  private getColorByAvgTemp(avgTemp: number): string {
+    return avgTemp < 0    ? '#00008B' :   // Dark blue for < 0°C
+           avgTemp < 10   ? '#1E90FF' :   // Light blue for 0-10°C
+           avgTemp < 20   ? '#00CED1' :   // Turquoise blue for 10-20°C
+           avgTemp < 30   ? '#ADFF2F' :   // Yellow-green for 20-30°C
+           avgTemp < 40   ? '#FFA500' :   // Orange for 30-40°C
+                            '#8B0000';    // Dark red for > 40°C
+  }
+
+  private addAvgTemperatureLegend() {
+    const legend = new L.Control({ position: 'bottomright' });
+  
+    legend.onAdd = (map) => {
+      const div = L.DomUtil.create('div', 'info legend');
+      div.innerHTML = `
+        <h6>Temperatur (Fläche)</h6>
+        <i style="background:#00008B"></i> < 0°C<br>
+        <i style="background:#1E90FF"></i> 0-10°C<br>
+        <i style="background:#00CED1"></i> 10-20°C<br>
+        <i style="background:#ADFF2F"></i> 20-30°C<br>
+        <i style="background:#FFA500"></i> 30-40°C<br>
+        <i style="background:#8B0000"></i> > 40°C
+      `;
+      return div;
+    };
+  
+    legend.addTo(this.map);
+  }
+
+  private calculateTemperatureDifference(data: any): number {
+    return Math.abs(data.temp - this.weatherReportTemp);
   }
 
   private getMarkersInsidePolygon(polygon: L.Polygon): any[] {
@@ -298,15 +421,15 @@ export class LeafletMapComponent implements OnInit {
   
     legend.onAdd = (map) => {
       const div = L.DomUtil.create('div', 'info legend');
-      div.innerHTML = '<h4>Anzahl der Sensoren</h4>';
-      const sensorRanges = [0, 1, 2, 3, 4, 5];
-      const colors = ['#ff0000', '#db1200', '#6d4900', '#495b00', '#246e00', '#008000'];
+      div.innerHTML = '<h6>Temperaturabweichung<br>(Umrandung)</h6>';
+      const tempDiffs = [0.2, 0.4, 0.6, 0.8, 1.0, 1.2];
+      const colors = ['#008000', '#246e00', '#495b00', '#6d4900', '#db1200', '#ff0000'];
   
-      for (let i = 0; i < sensorRanges.length; i++) {
-        if (i < sensorRanges.length - 1) {
-          div.innerHTML += '<i style="background:' + colors[i] + '"></i> ' + sensorRanges[i] + '<br>';
+      for (let i = 0; i < tempDiffs.length; i++) {
+        if (i < tempDiffs.length - 1) {
+          div.innerHTML += `<i style="background:${colors[i]}"></i> ${tempDiffs[i]}°C<br>`;
         } else {
-          div.innerHTML += '<i style="background:' + colors[i] + '"></i> ' + sensorRanges[i] + '+';
+          div.innerHTML += `<i style="background:${colors[i]}"></i> >${tempDiffs[i]}°C<br>`;
         }
       }
   
@@ -315,12 +438,12 @@ export class LeafletMapComponent implements OnInit {
   
     legend.addTo(this.map);
   }
-
+  
   private addTemperatureLegend(averageTemp: number) {
     this.temperatureLegend = new L.Control({ position: 'topright' });
     this.temperatureLegend.onAdd = (map) => {
       const div = L.DomUtil.create('div', 'info legend');
-      div.innerHTML = `<h4>⌀ Temperatur</h4>${averageTemp.toFixed(2)} °C`;
+      div.innerHTML = `<h6>⌀ Temperatur</h6>${averageTemp.toFixed(2)} °C`;
       return div;
     };
     this.temperatureLegend.addTo(this.map);
@@ -328,19 +451,96 @@ export class LeafletMapComponent implements OnInit {
 
   private addDigitalShadowLegend() {
     const descriptionLegend = new L.Control({ position: 'bottomleft' });
-  
-    descriptionLegend.onAdd = function (map) {
-      const div = L.DomUtil.create('div', 'info description-legend');
-      div.innerHTML = `<h4>Digitaler Schatten</h4>
-        <p>Der digitale Schatten ist die digitale Abbildung <br>
-        der von virtuellen Sensoren erfassten Daten, <br>
-        wie Temperaturwerte und Zeitstempel, die eine <br>
-        genaue Überwachung und Analyse in der <br>
-        physischen Welt ermöglicht.</p>`;
-      return div;
+
+    descriptionLegend.onAdd = (map) => {
+        const div = L.DomUtil.create('div', 'info legend');
+        div.innerHTML = `
+            <h6>Solid Dataspace Verbindung</h6>
+            <div>
+                <span style="display: inline-block; width: 10px; height: 10px; background-color: green; border-radius: 50%; margin-right: 5px;"></span>
+                <strong>solid-dataspace-1</strong>
+                <br>
+                <div style="padding-left: 20px; margin-top: 5px;">
+                    <span style="display: inline-block; width: 10px; height: 10px; background-color: green; border-radius: 50%; margin-right: 5px;"></span>
+                    <strong>data-pod-1</strong> <a href="http://localhost:3000/testpod1s1" target="_blank">http://localhost:3000/testpod1s1</a>
+                    <br>
+                    <div style="padding-left: 20px;">
+                        <span style="display: inline-block; width: 10px; height: 10px; background-color: green; border-radius: 50%; margin-right: 5px;"></span>
+                        sensor_1.csv
+                    </div>
+                    <div style="padding-left: 20px; margin-top: 5px;">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" role="switch" id="flexSwitchCheckSensor3">
+                            <label class="form-check-label" for="flexSwitchCheckSensor3">sensor_3.json</label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div style="margin-top: 10px;">
+                <span style="display: inline-block; width: 10px; height: 10px; background-color: green; border-radius: 50%; margin-right: 5px;"></span>
+                <strong>solid-dataspace-2</strong>
+                <br>
+                <div style="padding-left: 20px; margin-top: 5px;">
+                    <span style="display: inline-block; width: 10px; height: 10px; background-color: green; border-radius: 50%; margin-right: 5px;"></span>
+                    <strong>data-pod-2</strong> <a href="http://localhost:3000/testpod1s2" target="_blank">http://localhost:3000/testpod1s2</a>
+                    <br>
+                    <div style="padding-left: 20px;">
+                        <span style="display: inline-block; width: 10px; height: 10px; background-color: green; border-radius: 50%; margin-right: 5px;"></span>
+                        sensor_2.csv
+                    </div>
+                </div>
+            </div>
+        `;
+        return div;
     };
-  
+
     descriptionLegend.addTo(this.map);
+
+    // Add event listener for the switch
+    setTimeout(() => {
+        const sensor3Switch = document.getElementById('flexSwitchCheckSensor3') as HTMLInputElement;
+        if (sensor3Switch) {
+            sensor3Switch.addEventListener('change', (event) => {
+                if (sensor3Switch.checked) {
+                    this.addSensor3Marker();
+                } else {
+                    this.removeSensor3Marker();
+                }
+            });
+        }
+    }, 0);
+  }
+
+  private sensor3Marker: L.Marker | null = null;
+
+  private addSensor3Marker(): void {
+      if (!this.sensor3Marker) {
+          this.sensor3Marker = L.marker([51.30034498589104, 7.144262435658878], { 
+              icon: this.createIconStatic('assets/temperature.png') 
+          }).addTo(this.map);
+          this.sensor3Marker.bindPopup(`Temperatur: 8°C`).openTooltip();
+      }
+  }
+
+  private removeSensor3Marker(): void {
+      if (this.sensor3Marker) {
+          this.map.removeLayer(this.sensor3Marker);
+          this.sensor3Marker = null;
+      }
+  }
+
+  private addLogoLegend() {
+    const logoLegend = new L.Control({ position: 'topright' });
+
+    logoLegend.onAdd = (map) => {
+        const div = L.DomUtil.create('div', 'info logo-legend');
+        div.innerHTML = `
+            <img src="assets/images/GesundesTalLogo.webp" alt="Gesundes Tal Logo" style="width:50px; height:auto; margin-bottom:8px;">
+        `;
+        return div;
+    };
+
+    logoLegend.addTo(this.map);
   }
 
   private createMarkers() {
@@ -371,38 +571,19 @@ export class LeafletMapComponent implements OnInit {
   private createIconStatic(path: string): L.Icon {
     return L.icon({
       iconUrl: path,
-      iconSize: [25, 22],
+      iconSize: [25, 26],
       iconAnchor: [5, 30],
       popupAnchor: [7, -30]
     });
   }
 
-  private initializeWeatherReportLegend(temperature: number): void {
-    this.addTemperatureWeatherReportLegend(temperature);
-  }
-
-  private addTemperatureWeatherReportLegend(temperature: number) {
-    if (this.temperatureWeatherReportLegend) {
-      this.map.removeControl(this.temperatureWeatherReportLegend);
-    }
-    this.temperatureWeatherReportLegend = new L.Control({ position: 'topright' });
-
-    this.temperatureWeatherReportLegend.onAdd = (map) => {
-      const div = L.DomUtil.create('div', 'info temperature-weather-legend');
-      div.innerHTML = `<h4>Wetterbericht</h4>${temperature.toFixed(2)} °C`;
-      return div;
-    };
-
-    this.temperatureWeatherReportLegend.addTo(this.map);
-  }
-
-  public getColor(d: number): string {
-    return d >= 5  ? '#008000' :
-           d >= 4  ? '#246e00' :
-           d >= 3   ? '#495b00' :
-           d >= 2   ? '#6d4900' :
-           d >= 1   ? '#db1200' :
-                      '#ff0000';
+  public getColor(difference: number): string {
+    return difference > 1.2 ? '#ff0000' :
+           difference > 1.0 ? '#db1200' :
+           difference > 0.8 ? '#6d4900' :
+           difference > 0.6 ? '#495b00' :
+           difference > 0.4 ? '#246e00' :
+           '#008000';
   }
 
   onResize() {

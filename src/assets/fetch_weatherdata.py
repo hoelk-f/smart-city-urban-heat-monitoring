@@ -6,15 +6,16 @@ import time
 CSV_FILE = '/app/src/assets/sensors.csv'
 SPLIT_1_FILE = '/app/src/assets/sensor_1.csv'
 SPLIT_2_FILE = '/app/src/assets/sensor_2.csv'
-API_KEY = 'b46ba223dfe6adc962f8dc2c94ce7f2a'  # Make sure this key is valid
-WEATHER_UPDATE_INTERVAL = 1800  # 30 minutes
-NOISE_UPDATE_INTERVAL = 5  # 5 seconds
+WEATHER_REPORT_FILE = '/app/src/assets/weatherreportapi.csv'
+API_KEY = '37e2da2c2917f40932030c5cbab0d188'
+WEATHER_UPDATE_INTERVAL = 86400
+NOISE_UPDATE_INTERVAL = 5
 
 current_temperature = None
 last_weather_update = 0
 
 def get_weather_temperature():
-    global current_temperature
+    global current_temperature, last_weather_update
     print("Fetching weather data...")
     api_url = 'http://api.weatherstack.com/current'
     params = {
@@ -25,21 +26,35 @@ def get_weather_temperature():
     
     try:
         response = requests.get(api_url, params=params)
-        response.raise_for_status()  # Raise an error for unsuccessful requests
+        response.raise_for_status()
         
-        # Log the raw response for debugging
         print("API Response:", response.json())
         
         data = response.json()
         
-        # Check if the temperature data is in the response
         if 'current' in data and 'temperature' in data['current']:
             current_temperature = data['current']['temperature']
+            last_weather_update = time.time()
             print(f"Updated temperature from API: {current_temperature}°C")
+            log_weather_report(current_temperature)
         else:
             print("Error: Invalid data structure from API")
     except requests.RequestException as e:
         print(f"Error fetching temperature: {e}")
+
+def log_weather_report(temperature):
+    """Writes only the latest fetched temperature and timestamp to weatherreportapi.csv."""
+    print(f"Logging weather data: {temperature}°C")
+    fieldnames = ['timestamp', 'temperature']
+    with open(WEATHER_REPORT_FILE, mode='w', newline='') as csvfile:
+        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+        
+        # Write the header and the latest data
+        writer.writeheader()
+        writer.writerow({
+            'timestamp': time.strftime('%Y-%m-%d %H:%M:%S', time.localtime()),
+            'temperature': temperature
+        })
 
 def read_csv(filename):
     print(f"Reading CSV file: {filename}")
