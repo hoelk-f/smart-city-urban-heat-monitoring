@@ -322,7 +322,7 @@ export class LeafletMapComponent implements OnInit {
 
   private getColorByAvgTemp(avgTemp: number): string {
     return avgTemp < 0    ? '#00008B' :   // Dark blue for < 0°C
-           avgTemp < 10   ? '#1E90FF' :   // Light blue for 0-10°C
+           avgTemp < 11   ? '#1E90FF' :   // Light blue for 0-10°C
            avgTemp < 20   ? '#00CED1' :   // Turquoise blue for 10-20°C
            avgTemp < 30   ? '#ADFF2F' :   // Yellow-green for 20-30°C
            avgTemp < 40   ? '#FFA500' :   // Orange for 30-40°C
@@ -337,8 +337,8 @@ export class LeafletMapComponent implements OnInit {
       div.innerHTML = `
         <h6>Temperatur (Fläche)</h6>
         <i style="background:#00008B"></i> < 0°C<br>
-        <i style="background:#1E90FF"></i> 0-10°C<br>
-        <i style="background:#00CED1"></i> 10-20°C<br>
+        <i style="background:#1E90FF"></i> 0-11°C<br>
+        <i style="background:#00CED1"></i> 11-20°C<br>
         <i style="background:#ADFF2F"></i> 20-30°C<br>
         <i style="background:#FFA500"></i> 30-40°C<br>
         <i style="background:#8B0000"></i> > 40°C
