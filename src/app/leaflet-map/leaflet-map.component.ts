@@ -66,7 +66,7 @@ export class LeafletMapComponent implements OnInit {
         activated: true
       });
 
-      marker.bindPopup(`Temperatur: ${tempValue}°C`).openTooltip();
+      marker.bindPopup(`Temperature: ${tempValue}°C`).openTooltip();
 
       marker.on('contextmenu', () => {
         this.map.removeLayer(marker);
@@ -107,7 +107,7 @@ export class LeafletMapComponent implements OnInit {
 
     this.temperatureWeatherReportLegend.onAdd = (map) => {
       const div = L.DomUtil.create('div', 'info legend');
-      div.innerHTML = `<h6>Wetterbericht</h6>${temperature.toFixed(2)} °C`;
+      div.innerHTML = `<h6>Weather Report</h6>${temperature.toFixed(2)} °C`;
       return div;
     };
 
@@ -125,7 +125,7 @@ export class LeafletMapComponent implements OnInit {
 
           if (sensorData) {
             this.temperatureData.push({
-              temp: sensorData.temp_with_noise,
+              temp: sensorData.temp,
               lat: sensorData.lat,
               lng: sensorData.lng,
               coordinates: feature.geometry.coordinates,
@@ -148,7 +148,7 @@ export class LeafletMapComponent implements OnInit {
           );
 
           if (dataIndex >= 0) {
-            this.temperatureData[dataIndex].temp = sensorData.temp_with_noise;
+            this.temperatureData[dataIndex].temp = sensorData.temp;
             this.temperatureData[dataIndex].activated = sensorData.activated;
           }
         });
@@ -164,7 +164,7 @@ export class LeafletMapComponent implements OnInit {
     this.temperatureData.forEach((data, index) => {
       if (this.markers[index]) {
         const marker = this.markers[index];
-        const popupContent = `Temperatur: ${data.temp}°C`;
+        const popupContent = `Temperature: ${data.temp}°C`;
         marker.setLatLng([data.lat, data.lng]);
         marker.getPopup()?.setContent(popupContent);
 
@@ -175,31 +175,40 @@ export class LeafletMapComponent implements OnInit {
   }  
 
   private fetchCsvData(): Observable<any[]> {
-    const sensor1$ = this.http.get('assets/sensor_1.csv', { responseType: 'text' }).pipe(
+    const sensor1$ = this.http.get('assets/temp-1.csv', { responseType: 'text' }).pipe(
       map(data => this.parseCsvData(data)),
       catchError(err => {
-        console.error('Error reading sensor_1 CSV data:', err);
+        console.error('Error reading temp-1 CSV data:', err);
         return of([]);
       })
     );
-  
-    const sensor2$ = this.http.get('assets/sensor_2.csv', { responseType: 'text' }).pipe(
+    
+    const sensor2$ = this.http.get('assets/temp-2.csv', { responseType: 'text' }).pipe(
       map(data => this.parseCsvData(data)),
       catchError(err => {
-        console.error('Error reading sensor_2 CSV data:', err);
+        console.error('Error reading temp-2 CSV data:', err);
         return of([]);
       })
     );
-  
+    
+    const sensor3$ = this.http.get('assets/temp-3.csv', { responseType: 'text' }).pipe(
+      map(data => this.parseCsvData(data)),
+      catchError(err => {
+        console.error('Error reading temp-3 CSV data:', err);
+        return of([]);
+      })
+    );
+    
     return sensor1$.pipe(
-      map(sensor1Data => {
-        return sensor2$.pipe(
-          map(sensor2Data => {
-            return [...sensor1Data, ...sensor2Data];
-          })
-        );
-      }),
-      switchMap(data => data)
+      switchMap(sensor1Data => 
+        sensor2$.pipe(
+          switchMap(sensor2Data => 
+            sensor3$.pipe(
+              map(sensor3Data => [...sensor1Data, ...sensor2Data, ...sensor3Data])
+            )
+          )
+        )
+      )
     );
   }
   
@@ -208,14 +217,14 @@ export class LeafletMapComponent implements OnInit {
     return rows
       .filter(row => row.trim() !== '')
       .map(row => {
-        const [quartier, lat, lng, temp, activated, temp_with_noise] = row.split(',').map(cell => cell.trim());
+        const [city, quartier, lat, lng, temp, activated] = row.split(',').map(cell => cell.trim());
         return {
+          city: city,
           quartier: quartier,
           lat: parseFloat(lat),
           lng: parseFloat(lng),
           temp: parseFloat(temp),
-          activated: activated.toLowerCase() === 'true',
-          temp_with_noise: parseFloat(temp_with_noise)
+          activated: activated.toLowerCase() === 'true'
         };
       });
   }  
@@ -272,13 +281,13 @@ export class LeafletMapComponent implements OnInit {
           if (countMarkersInside === 0) {
             content = 
               `<strong>${data.name}</strong>` +
-              `<br><br><img src="assets/weather.png" alt="Description" style="width:14px; height:15px;"> Temperatur: ${this.weatherReportTemp}°C` +
-              `<br><br> Anzahl Sensoren: ${countMarkersInside}`;
+              `<br><br><img src="assets/weather.png" alt="Description" style="width:14px; height:15px;"> Temperature: ${this.weatherReportTemp}°C` +
+              `<br><br> Count Sensors: ${countMarkersInside}`;
           } else {
             content = 
               `<strong>${data.name}</strong>` +
-              `<br><br><img src="assets/sensor.png" alt="Description" style="width:14px; height:15px;"> ⌀ Temperatur: ${meanTemp.toFixed(2)}°C` +
-              `<br><br> Anzahl Sensoren: ${countMarkersInside}`;
+              `<br><br><img src="assets/sensor.png" alt="Description" style="width:14px; height:15px;"> ⌀ Temperature: ${meanTemp.toFixed(2)}°C` +
+              `<br><br> Count Sensors: ${countMarkersInside}`;
           }
   
           updateLegend(content);
@@ -335,7 +344,7 @@ export class LeafletMapComponent implements OnInit {
     legend.onAdd = (map) => {
       const div = L.DomUtil.create('div', 'info legend');
       div.innerHTML = `
-        <h6>Temperatur (Fläche)</h6>
+        <h6>Temperature (Area)</h6>
         <i style="background:#00008B"></i> < 0°C<br>
         <i style="background:#1E90FF"></i> 0-11°C<br>
         <i style="background:#00CED1"></i> 11-20°C<br>
@@ -421,7 +430,7 @@ export class LeafletMapComponent implements OnInit {
   
     legend.onAdd = (map) => {
       const div = L.DomUtil.create('div', 'info legend');
-      div.innerHTML = '<h6>Temperaturabweichung<br>(Umrandung)</h6>';
+      div.innerHTML = '<h6>Temperature Deviation (Border)</h6>';
       const tempDiffs = [0.2, 0.4, 0.6, 0.8, 1.0, 1.2];
       const colors = ['#008000', '#246e00', '#495b00', '#6d4900', '#db1200', '#ff0000'];
   
@@ -443,7 +452,7 @@ export class LeafletMapComponent implements OnInit {
     this.temperatureLegend = new L.Control({ position: 'topright' });
     this.temperatureLegend.onAdd = (map) => {
       const div = L.DomUtil.create('div', 'info legend');
-      div.innerHTML = `<h6>⌀ Temperatur</h6>${averageTemp.toFixed(2)} °C`;
+      div.innerHTML = `<h6>⌀ Temperature</h6>${averageTemp.toFixed(2)} °C`;
       return div;
     };
     this.temperatureLegend.addTo(this.map);
@@ -455,39 +464,19 @@ export class LeafletMapComponent implements OnInit {
     descriptionLegend.onAdd = (map) => {
         const div = L.DomUtil.create('div', 'info legend');
         div.innerHTML = `
-            <h6>Solid Dataspace Verbindung</h6>
-            <div>
-                <span style="display: inline-block; width: 10px; height: 10px; background-color: green; border-radius: 50%; margin-right: 5px;"></span>
-                <strong>solid-dataspace-1</strong>
-                <br>
-                <div style="padding-left: 20px; margin-top: 5px;">
+            <h6>Found Data Sources</h6>
+            <div style="padding-left: 20px;">
+                <div>
                     <span style="display: inline-block; width: 10px; height: 10px; background-color: green; border-radius: 50%; margin-right: 5px;"></span>
-                    <strong>data-pod-1</strong> <a href="http://localhost:3000/testpod1s1" target="_blank">http://localhost:3000/testpod1s1</a>
-                    <br>
-                    <div style="padding-left: 20px;">
-                        <span style="display: inline-block; width: 10px; height: 10px; background-color: green; border-radius: 50%; margin-right: 5px;"></span>
-                        sensor_1.csv
-                    </div>
-                    <div style="padding-left: 20px; margin-top: 5px;">
-                        <div class="form-check form-switch">
-                            <input class="form-check-input" type="checkbox" role="switch" id="flexSwitchCheckSensor3">
-                            <label class="form-check-label" for="flexSwitchCheckSensor3">sensor_3.json</label>
-                        </div>
-                    </div>
+                    temp-1.csv
                 </div>
-            </div>
-            <div style="margin-top: 10px;">
-                <span style="display: inline-block; width: 10px; height: 10px; background-color: green; border-radius: 50%; margin-right: 5px;"></span>
-                <strong>solid-dataspace-2</strong>
-                <br>
-                <div style="padding-left: 20px; margin-top: 5px;">
+                <div style="margin-top: 5px;">
                     <span style="display: inline-block; width: 10px; height: 10px; background-color: green; border-radius: 50%; margin-right: 5px;"></span>
-                    <strong>data-pod-2</strong> <a href="http://localhost:3000/testpod1s2" target="_blank">http://localhost:3000/testpod1s2</a>
-                    <br>
-                    <div style="padding-left: 20px;">
-                        <span style="display: inline-block; width: 10px; height: 10px; background-color: green; border-radius: 50%; margin-right: 5px;"></span>
-                        sensor_2.csv
-                    </div>
+                    temp-2.json
+                </div>
+                <div style="margin-top: 5px;">
+                    <span style="display: inline-block; width: 10px; height: 10px; background-color: green; border-radius: 50%; margin-right: 5px;"></span>
+                    temp-3.csv
                 </div>
             </div>
         `;
@@ -518,7 +507,7 @@ export class LeafletMapComponent implements OnInit {
           this.sensor3Marker = L.marker([51.30034498589104, 7.144262435658878], { 
               icon: this.createIconStatic('assets/temperature.png') 
           }).addTo(this.map);
-          this.sensor3Marker.bindPopup(`Temperatur: 8°C`).openTooltip();
+          this.sensor3Marker.bindPopup(`Temperature: 8°C`).openTooltip();
       }
   }
 
@@ -535,7 +524,7 @@ export class LeafletMapComponent implements OnInit {
     logoLegend.onAdd = (map) => {
         const div = L.DomUtil.create('div', 'info logo-legend');
         div.innerHTML = `
-            <img src="assets/images/GesundesTalLogo.webp" alt="Gesundes Tal Logo" style="width:50px; height:auto; margin-bottom:8px;">
+            <img src="assets/images/Icon_GesundesTal_RGB.jpg" alt="Gesundes Tal Logo" style="width:50px; height:auto; margin-bottom:8px;">
         `;
         return div;
     };
@@ -550,7 +539,7 @@ export class LeafletMapComponent implements OnInit {
       const icon = this.createIconStatic(iconPath);
 
       const marker = L.marker([data.lat, data.lng], { icon: icon })
-          .bindPopup(`Temperatur: ${data.temp}°C`);
+          .bindPopup(`Temperature: ${data.temp}°C`);
 
       marker.on('contextmenu', () => {
         const markerData = this.temperatureData.find(md => md.lat === data.lat && md.lng === data.lng);

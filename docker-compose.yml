@@ -12,12 +12,12 @@ services:
     environment:
       - NODE_ENV=production
 
-  python-weather:
-    build:
-      context: .
-      dockerfile: Dockerfile.python
-    volumes:
-      - ./src:/app/src
-    environment:
-      - API_KEY=b46ba223dfe6adc962f8dc2c94ce7f2a
-    tty: true
+#  python-weather:
+#    build:
+#      context: .
+#      dockerfile: Dockerfile.python
+#    volumes:
+#      - ./src:/app/src
+#    environment:
+#      - API_KEY=b46ba223dfe6adc962f8dc2c94ce7f2a
+#    tty: true
