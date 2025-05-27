@@ -4,6 +4,7 @@ import { HttpClient } from '@angular/common/http';
 import { MarkerData } from '../interface/MarkerData';
 import { Observable, of } from 'rxjs';
 import { catchError, map, switchMap } from 'rxjs/operators';
+import { SensorDataService } from '../sensor-data.service';
 
 @Component({
   selector: 'app-leaflet-map',
