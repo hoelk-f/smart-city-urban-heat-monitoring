@@ -115,29 +115,40 @@ export class LeafletMapComponent implements OnInit {
   }
 
   private initializeTemperatureData() {
-    this.http.get<any>('assets/modified_wuppertal_quartiere.json').subscribe(jsonData => {
-      this.fetchCsvData().subscribe(csvData => {
-        this.temperatureData = [];
+    this.http.get<any>('https://testpod1.solidcommunity.net/public/hma-wuppertal-quartiere.json')
+      .subscribe({
+        next: (jsonData) => {
+          this.fetchCsvData().subscribe({
+            next: (csvData) => {
+              this.temperatureData = [];
 
-        jsonData.features.forEach((feature: any) => {
-          const quartier = feature.properties.QUARTIER;
-          const sensorData = csvData.find(data => data.quartier == quartier);
+              jsonData.features.forEach((feature: any) => {
+                const quartier = feature.properties.QUARTIER;
+                const sensorData = csvData.find(data => data.quartier == quartier);
 
-          if (sensorData) {
-            this.temperatureData.push({
-              temp: sensorData.temp,
-              lat: sensorData.lat,
-              lng: sensorData.lng,
-              coordinates: feature.geometry.coordinates,
-              name: feature.properties.NAME,
-              activated: sensorData.activated
-            });
-          }
-        });
+                if (sensorData) {
+                  this.temperatureData.push({
+                    temp: sensorData.temp,
+                    lat: sensorData.lat,
+                    lng: sensorData.lng,
+                    coordinates: feature.geometry.coordinates,
+                    name: feature.properties.NAME,
+                    activated: sensorData.activated
+                  });
+                }
+              });
 
-        this.createMarkers();
-        this.initializePolygonLayer();
-      });
+              this.createMarkers();
+              this.initializePolygonLayer();
+            },
+            error: (csvError) => {
+              console.error('Error loading CSV sensor data:', csvError);
+            }
+          });
+        },
+      error: (jsonError) => {
+        console.error('Error loading GeoJSON from Solid Pod:', jsonError);
+      }
     });
 
     setInterval(() => {
@@ -524,13 +535,15 @@ export class LeafletMapComponent implements OnInit {
     logoLegend.onAdd = (map) => {
         const div = L.DomUtil.create('div', 'info logo-legend');
         div.innerHTML = `
-            <img src="assets/images/Icon_GesundesTal_RGB.jpg" alt="Gesundes Tal Logo" style="width:50px; height:auto; margin-bottom:8px;">
+            <img src="assets/images/Icon_GesundesTal.png" alt="Gesundes Tal Logo" style="width:50px; height:auto; margin-bottom:8px; margin-right:10px;">
+            <img src="assets/images/KFW.svg" alt="KFW Logo" style="width:50px; height:auto; margin-right:10px;">
+            <img src="assets/images/BMWSB.png" alt="BMWSB Logo" style="width:150px; height:auto; margin-bottom:8px; ">
         `;
         return div;
     };
 
     logoLegend.addTo(this.map);
-  }
+}
 
   private createMarkers() {
     this.markers = [];
