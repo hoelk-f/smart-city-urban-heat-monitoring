@@ -270,11 +270,10 @@ export class LeafletMapComponent implements OnInit {
   
         data.polygonLayer = polygon;
   
-        updatePolygonStyle(); // Initial color update
+        updatePolygonStyle();
       }
     });
   
-    // Periodically update the color and border of each polygon
     setInterval(() => {
       this.temperatureData.forEach(data => {
         if (data.polygonLayer) {
@@ -282,8 +281,8 @@ export class LeafletMapComponent implements OnInit {
           const meanTemp = this.calculateMeanTemperature(markersInside);
           const tempDiff = Math.abs(meanTemp - this.weatherReportTemp);
           data.polygonLayer.setStyle({
-            fillColor: this.getColorByAvgTemp(meanTemp), // Update fill color based on AVG temp
-            color: this.getColor(tempDiff) // Update border color based on temperature difference
+            fillColor: this.getColorByAvgTemp(meanTemp),
+            color: this.getColor(tempDiff)
           });
         }
       });
@@ -425,7 +424,14 @@ export class LeafletMapComponent implements OnInit {
     descriptionLegend.onAdd = (map) => {
         const div = L.DomUtil.create('div', 'info legend');
         div.innerHTML = `
-            <h6>Integrated Data Sources from Solid Pods</h6>
+            <h6>Integrated GeoJSON file from Solid Pod</h6>
+            <div style="padding-left: 20px;">
+                <div>
+                    <span style="display: inline-block; width: 10px; height: 10px; background-color: green; border-radius: 50%; margin-right: 5px;"></span>
+                    hma-wuppertal-quartiere.json
+                </div>
+            </div>
+            <h6 style="margin-top: 10px;">Integrated Data Sources from Solid Pods</h6>
             <div style="padding-left: 20px;">
                 <div>
                     <span style="display: inline-block; width: 10px; height: 10px; background-color: green; border-radius: 50%; margin-right: 5px;"></span>
@@ -446,7 +452,6 @@ export class LeafletMapComponent implements OnInit {
 
     descriptionLegend.addTo(this.map);
 
-    // Add event listener for the switch
     setTimeout(() => {
         const sensor3Switch = document.getElementById('flexSwitchCheckSensor3') as HTMLInputElement;
         if (sensor3Switch) {
