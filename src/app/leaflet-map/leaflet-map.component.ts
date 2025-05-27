@@ -21,7 +21,7 @@ export class LeafletMapComponent implements OnInit {
   private weatherReportTemp: number = 18;
   private temperatureData: any[] = [];
 
-  constructor(private http: HttpClient) {}
+  constructor(private http: HttpClient, private sensorDataService: SensorDataService) {}
 
   ngOnInit(): void {
     if (typeof window !== 'undefined') {
@@ -118,57 +118,61 @@ export class LeafletMapComponent implements OnInit {
   private initializeTemperatureData() {
     this.http.get<any>('https://testpod1.solidcommunity.net/public/hma-wuppertal-quartiere.json')
       .subscribe({
-        next: (jsonData) => {
-          this.fetchCsvData().subscribe({
-            next: (csvData) => {
-              this.temperatureData = [];
+        next: async (geoJson) => {
+          try {
+            const solidSensorData = await this.sensorDataService.loadAllSensors();
+            this.temperatureData = [];
 
-              jsonData.features.forEach((feature: any) => {
-                const quartier = feature.properties.QUARTIER;
-                const sensorData = csvData.find(data => data.quartier == quartier);
+            geoJson.features.forEach((feature: any) => {
+              const quartier = parseInt(feature.properties.QUARTIER, 10);
+              const sensorData = solidSensorData.find(s =>
+                parseInt(s.district?.toString() ?? '', 10) === quartier
+              );
 
-                if (sensorData) {
-                  this.temperatureData.push({
-                    temp: sensorData.temp,
-                    lat: sensorData.lat,
-                    lng: sensorData.lng,
-                    coordinates: feature.geometry.coordinates,
-                    name: feature.properties.NAME,
-                    activated: sensorData.activated
-                  });
-                }
-              });
+              if (sensorData) {
+                this.temperatureData.push({
+                  temp: sensorData.temp,
+                  lat: sensorData.lat,
+                  lng: sensorData.lng,
+                  coordinates: feature.geometry.coordinates,
+                  name: feature.properties.NAME,
+                  activated: sensorData.activated
+                });
+              }
+            });
 
-              this.createMarkers();
-              this.initializePolygonLayer();
-            },
-            error: (csvError) => {
-              console.error('Error loading CSV sensor data:', csvError);
-            }
-          });
+            this.createMarkers();
+            this.initializePolygonLayer();
+          } catch (err) {
+            console.error('Error loading Solid Pod sensor data:', err);
+          }
         },
-      error: (jsonError) => {
-        console.error('Error loading GeoJSON from Solid Pod:', jsonError);
-      }
-    });
+        error: (jsonError) => {
+          console.error('Error loading GeoJSON from Solid Pod:', jsonError);
+        }
+      });
 
-    setInterval(() => {
-      this.fetchCsvData().subscribe(updatedData => {
-        updatedData.forEach(sensorData => {
+    setInterval(async () => {
+      try {
+        const updatedData = await this.sensorDataService.loadAllSensors();
+
+        updatedData.forEach(sensor => {
           const dataIndex = this.temperatureData.findIndex(
-            td => td.lat == sensorData.lat && td.lng == sensorData.lng
+            td => td.lat === sensor.lat && td.lng === sensor.lng
           );
 
           if (dataIndex >= 0) {
-            this.temperatureData[dataIndex].temp = sensorData.temp;
-            this.temperatureData[dataIndex].activated = sensorData.activated;
+            this.temperatureData[dataIndex].temp = sensor.temp;
+            this.temperatureData[dataIndex].activated = sensor.activated;
           }
         });
 
         this.updateMarkers();
         const averageTemp = this.calculateOverallAverageTemperature();
         this.updateTemperatureLegend(averageTemp);
-      });
+      } catch (err) {
+        console.error('Failed to update sensor data:', err);
+      }
     }, 5000);
   }
 
@@ -186,69 +190,14 @@ export class LeafletMapComponent implements OnInit {
     });
   }  
 
-  private fetchCsvData(): Observable<any[]> {
-    const sensor1$ = this.http.get('assets/temp-1.csv', { responseType: 'text' }).pipe(
-      map(data => this.parseCsvData(data)),
-      catchError(err => {
-        console.error('Error reading temp-1 CSV data:', err);
-        return of([]);
-      })
-    );
-    
-    const sensor2$ = this.http.get('assets/temp-2.csv', { responseType: 'text' }).pipe(
-      map(data => this.parseCsvData(data)),
-      catchError(err => {
-        console.error('Error reading temp-2 CSV data:', err);
-        return of([]);
-      })
-    );
-    
-    const sensor3$ = this.http.get('assets/temp-3.csv', { responseType: 'text' }).pipe(
-      map(data => this.parseCsvData(data)),
-      catchError(err => {
-        console.error('Error reading temp-3 CSV data:', err);
-        return of([]);
-      })
-    );
-    
-    return sensor1$.pipe(
-      switchMap(sensor1Data => 
-        sensor2$.pipe(
-          switchMap(sensor2Data => 
-            sensor3$.pipe(
-              map(sensor3Data => [...sensor1Data, ...sensor2Data, ...sensor3Data])
-            )
-          )
-        )
-      )
-    );
-  }
-  
-  private parseCsvData(data: string): any[] {
-    const rows = data.replace(/\r\n/g, '\n').split('\n').slice(1);
-    return rows
-      .filter(row => row.trim() !== '')
-      .map(row => {
-        const [city, quartier, lat, lng, temp, activated] = row.split(',').map(cell => cell.trim());
-        return {
-          city: city,
-          quartier: quartier,
-          lat: parseFloat(lat),
-          lng: parseFloat(lng),
-          temp: parseFloat(temp),
-          activated: activated.toLowerCase() === 'true'
-        };
-      });
-  }  
-
   private initializePolygonLayer(): void {
     this.temperatureData.forEach(data => {
       if (data.coordinates) {
         
         const polygon = L.polygon(data.coordinates, {
-          fillColor: this.getColorByAvgTemp(0), // Initial fill color based on placeholder avg temperature
+          fillColor: this.getColorByAvgTemp(0),
           fillOpacity: 0.4,
-          color: this.getColor(1), // Initial border color
+          color: this.getColor(1),
           weight: 2
         }).addTo(this.map);
   
@@ -257,8 +206,8 @@ export class LeafletMapComponent implements OnInit {
           const meanTemp = this.calculateMeanTemperature(markersInside);
           const tempDiff = Math.abs(meanTemp - this.weatherReportTemp);
           polygon.setStyle({
-            fillColor: this.getColorByAvgTemp(meanTemp), // Fill color based on AVG temp
-            color: this.getColor(tempDiff), // Border color based on temperature difference
+            fillColor: this.getColorByAvgTemp(meanTemp),
+            color: this.getColor(tempDiff),
             fillOpacity: 0.4
           });
         };
@@ -476,19 +425,19 @@ export class LeafletMapComponent implements OnInit {
     descriptionLegend.onAdd = (map) => {
         const div = L.DomUtil.create('div', 'info legend');
         div.innerHTML = `
-            <h6>Found Data Sources</h6>
+            <h6>Integrated Data Sources from Solid Pods</h6>
             <div style="padding-left: 20px;">
                 <div>
                     <span style="display: inline-block; width: 10px; height: 10px; background-color: green; border-radius: 50%; margin-right: 5px;"></span>
-                    temp-1.csv
+                    hma-temp-1.csv
                 </div>
                 <div style="margin-top: 5px;">
                     <span style="display: inline-block; width: 10px; height: 10px; background-color: green; border-radius: 50%; margin-right: 5px;"></span>
-                    temp-2.json
+                    hma-temp-2.json
                 </div>
                 <div style="margin-top: 5px;">
                     <span style="display: inline-block; width: 10px; height: 10px; background-color: green; border-radius: 50%; margin-right: 5px;"></span>
-                    temp-3.csv
+                    hma-temp-3.csv
                 </div>
             </div>
         `;

@@ -19,25 +19,25 @@ export class SensorDataService {
       lat: parseFloat(r.lat),
       lng: parseFloat(r.lng),
       temp: parseFloat(r.temp),
-      activated: r.activated === 'true',
+      activated: r.activated,
     }));
 
     const normalized2 = (json2 ?? []).map((r: any) => ({
       city: r.location,
       district: r.district,
-      lat: r.latitude,
-      lng: r.longitude,
-      temp: r.t,
+      lat: parseFloat(r.latitude),
+      lng: parseFloat(r.longitude),
+      temp: parseFloat(r.t),
       activated: r.activated,
     }));
 
     const normalized3 = csv3.map((r: any) => ({
-      city: 'wuppertal',
+      city: r.c,
       district: r.q,
       lat: parseFloat(r.lat),
       lng: parseFloat(r.lng),
       temp: parseFloat(r.t),
-      activated: r.activation === 'true',
+      activated: r.activation,
     }));
 
     return [...normalized1, ...normalized2, ...normalized3];
