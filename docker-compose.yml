@@ -1,7 +1,7 @@
 version: '3.8'
 
 services:
-  angular-app:
+  heat-monitoring-app:
     build:
       context: .
       dockerfile: Dockerfile.angular
@@ -21,3 +21,20 @@ services:
 #    environment:
 #      - API_KEY=b46ba223dfe6adc962f8dc2c94ce7f2a
 #    tty: true
+
+  caddy:
+    image: caddy:2
+    container_name: reverse_proxy
+    ports:
+      - "80:80"
+      #- "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - heat-monitoring-app
+
+volumes:
+  caddy_data:
+  caddy_config:
