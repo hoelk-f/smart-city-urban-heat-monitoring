@@ -1,0 +1,17 @@
+version: '3.8'
+
+services:
+  caddy:
+    volumes:
+      - ./Caddyfile.local:/etc/caddy/Caddyfile
+
+# Optional: python-weather für dev aktivieren
+#  python-weather:
+#    build:
+#      context: .
+#      dockerfile: Dockerfile.python
+#    volumes:
+#      - ./src:/app/src
+#    environment:
+#      - API_KEY=dev-test-key
+#    tty: true

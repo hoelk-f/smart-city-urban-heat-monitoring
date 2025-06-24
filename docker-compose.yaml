@@ -12,22 +12,11 @@ services:
     environment:
       - NODE_ENV=production
 
-#  python-weather:
-#    build:
-#      context: .
-#      dockerfile: Dockerfile.python
-#    volumes:
-#      - ./src:/app/src
-#    environment:
-#      - API_KEY=b46ba223dfe6adc962f8dc2c94ce7f2a
-#    tty: true
-
   caddy:
     image: caddy:2
     container_name: reverse_proxy
     ports:
       - "80:80"
-      #- "443:443"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile
       - caddy_data:/data
