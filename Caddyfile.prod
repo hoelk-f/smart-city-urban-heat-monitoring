@@ -8,7 +8,7 @@
 # this machine's public IP, then replace ":80" below with your
 # domain name.
 
-smart-city-urban-heat-monitoring.com {
+smart-city-urban-heat-monitoring.com, www.smart-city-urban-heat-monitoring.com {
   handle {
     reverse_proxy heat-monitoring-app:4200
   }
