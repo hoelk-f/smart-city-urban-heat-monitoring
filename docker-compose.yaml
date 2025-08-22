@@ -11,14 +11,3 @@ services:
       - ./src:/app/src
     environment:
       - NODE_ENV=production
-
-  # Optional: python-weather service
-  # python-weather:
-  #   build:
-  #     context: .
-  #     dockerfile: Dockerfile.python
-  #   volumes:
-  #     - ./src:/app/src
-  #   environment:
-  #     - API_KEY=your_api_key_here
-  #   tty: true
