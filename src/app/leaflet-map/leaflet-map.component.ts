@@ -490,7 +490,7 @@ export class LeafletMapComponent implements OnInit {
     logoLegend.onAdd = (map) => {
         const div = L.DomUtil.create('div', 'info logo-legend');
         div.innerHTML = `
-            <img src="assets/images/Icon_GesundesTal.png" alt="Gesundes Tal Logo" style="width:50px; height:auto; margin-bottom:8px; margin-right:10px;">
+            <img src="assets/images/Icon_GesundesTal.png" alt="Smart City Urban Heat Monitoring Logo" style="width:50px; height:auto; margin-bottom:8px; margin-right:10px;">
             <img src="assets/images/KFW.svg" alt="KFW Logo" style="width:50px; height:auto; margin-right:10px;">
             <img src="assets/images/BMWSB.png" alt="BMWSB Logo" style="width:150px; height:auto; margin-bottom:8px; ">
         `;
