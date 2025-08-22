@@ -12,18 +12,13 @@ services:
     environment:
       - NODE_ENV=production
 
-  caddy:
-    image: caddy:2
-    container_name: reverse_proxy_heat_monitoring_app
-    ports:
-      - "80:80"
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile
-      - caddy_data:/data
-      - caddy_config:/config
-    depends_on:
-      - heat-monitoring-app
-
-volumes:
-  caddy_data:
-  caddy_config:
+  # Optional: python-weather service
+  # python-weather:
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile.python
+  #   volumes:
+  #     - ./src:/app/src
+  #   environment:
+  #     - API_KEY=your_api_key_here
+  #   tty: true
