@@ -1,4 +1,4 @@
-# Dockerfile.angular
+# Dockerfile for Smart City Urban Heat Monitoring
 
 # Step 1: Use Node.js image to build and serve Angular App
 FROM node:18 AS angular-build
