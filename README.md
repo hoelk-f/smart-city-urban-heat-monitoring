@@ -6,6 +6,16 @@ This project was generated with [Angular CLI](https://github.com/angular/angular
 
 Run `ng serve` for a dev server. Navigate to `http://localhost:4200/`. The application will automatically reload if you change any of the source files.
 
+## Docker
+
+Build and run the application in a container on port 4200 using Docker Compose:
+
+```
+docker-compose up -d --build
+```
+
+After the command completes, open [http://localhost:4200](http://localhost:4200) to access the application.
+
 ## Code scaffolding
 
 Run `ng generate component component-name` to generate a new component. You can also use `ng generate directive|pipe|service|class|guard|interface|enum|module`.

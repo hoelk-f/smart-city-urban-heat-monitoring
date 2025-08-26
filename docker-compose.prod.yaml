@@ -1,19 +1,13 @@
 version: '3.8'
 
 services:
-  caddy:
-    ports:
-      - "443:443"
-    volumes:
-      - ./Caddyfile.prod:/etc/caddy/Caddyfile
-
-# Optional: python-weather für prod aktivieren
-#  python-weather:
-#    build:
-#      context: .
-#      dockerfile: Dockerfile.python
-#    volumes:
-#      - ./src:/app/src
-#    environment:
-#      - API_KEY=b46ba223dfe6adc962f8dc2c94ce7f2a
-#    tty: true
+  # Optional: python-weather für prod aktivieren
+  # python-weather:
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile.python
+  #   volumes:
+  #     - ./src:/app/src
+  #   environment:
+  #     - API_KEY=b46ba223dfe6adc962f8dc2c94ce7f2a
+  #   tty: true
