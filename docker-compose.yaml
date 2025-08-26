@@ -1,10 +1,10 @@
 version: '3.8'
 
 services:
-  heat-monitoring-app:
+  smart-city-urban-heat-monitoring:
     build:
       context: .
-      dockerfile: Dockerfile.angular
+      dockerfile: Dockerfile
     ports:
       - "4200:4200"
     volumes:
@@ -14,7 +14,7 @@ services:
 
   caddy:
     image: caddy:2
-    container_name: reverse_proxy_heat_monitoring_app
+    container_name: reverse_proxy_smart_city_urban_heat_monitoring
     ports:
       - "80:80"
     volumes:
@@ -22,7 +22,7 @@ services:
       - caddy_data:/data
       - caddy_config:/config
     depends_on:
-      - heat-monitoring-app
+      - smart-city-urban-heat-monitoring
 
 volumes:
   caddy_data:
