@@ -1,7 +1,7 @@
-# Dockerfile.angular
+# Dockerfile
 
-# Step 1: Use Node.js image to build and serve Angular App
-FROM node:18 AS angular-build
+# Use Node.js image to build and serve Angular app
+FROM node:18
 
 # Set working directory inside the container
 WORKDIR /app

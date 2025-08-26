@@ -2,9 +2,7 @@ version: '3.8'
 
 services:
   heat-monitoring-app:
-    build:
-      context: .
-      dockerfile: Dockerfile.angular
+    build: .
     ports:
       - "4200:4200"
     volumes:
@@ -23,17 +21,6 @@ services:
       - caddy_config:/config
     depends_on:
       - heat-monitoring-app
-
-  # Optional: python-weather aktivieren
-  # python-weather:
-  #   build:
-  #     context: .
-  #     dockerfile: Dockerfile.python
-  #   volumes:
-  #     - ./src:/app/src
-  #   environment:
-  #     - API_KEY=your_api_key
-  #   tty: true
 
 volumes:
   caddy_data:
