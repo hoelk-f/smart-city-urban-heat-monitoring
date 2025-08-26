@@ -4,7 +4,7 @@ This project was generated with [Angular CLI](https://github.com/angular/angular
 
 ## Docker
 
-The provided Dockerfile builds the Angular app with a base href of `/smart-city-urban-heat-monitoring/` and serves the compiled files with Nginx.
+The provided Dockerfile builds the Angular app with a base href of `/smart-city-urban-heat-monitoring/` and serves the compiled files using [Caddy](https://caddyserver.com) as a reverse proxy.
 To run the application with Docker, use the included Compose file:
 
 ```
