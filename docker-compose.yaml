@@ -11,19 +11,3 @@ services:
       - ./src:/app/src
     environment:
       - NODE_ENV=production
-
-  caddy:
-    image: caddy:2
-    container_name: reverse_proxy_heat_monitoring_app
-    ports:
-      - "80:80"
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile
-      - caddy_data:/data
-      - caddy_config:/config
-    depends_on:
-      - heat-monitoring-app
-
-volumes:
-  caddy_data:
-  caddy_config:
