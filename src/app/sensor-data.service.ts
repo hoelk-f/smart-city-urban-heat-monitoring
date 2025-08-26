@@ -13,32 +13,38 @@ export class SensorDataService {
       this.loadCSV('https://testpodfh.solidcommunity.net/public/hma-temp-3.csv'),
     ]);
 
-    const normalized1 = csv1.map((r: any) => ({
-      city: r.city,
-      district: r.QUARTIER,
-      lat: parseFloat(r.lat),
-      lng: parseFloat(r.lng),
-      temp: parseFloat(r.temp),
-      activated: r.activated,
-    }));
+    const normalized1 = Array.isArray(csv1)
+      ? csv1.map((r: any) => ({
+          city: r.city,
+          district: r.QUARTIER,
+          lat: parseFloat(r.lat),
+          lng: parseFloat(r.lng),
+          temp: parseFloat(r.temp),
+          activated: r.activated,
+        }))
+      : [];
 
-    const normalized2 = (json2 ?? []).map((r: any) => ({
-      city: r.location,
-      district: r.district,
-      lat: parseFloat(r.latitude),
-      lng: parseFloat(r.longitude),
-      temp: parseFloat(r.t),
-      activated: r.activated,
-    }));
+    const normalized2 = Array.isArray(json2)
+      ? json2.map((r: any) => ({
+          city: r.location,
+          district: r.district,
+          lat: parseFloat(r.latitude),
+          lng: parseFloat(r.longitude),
+          temp: parseFloat(r.t),
+          activated: r.activated,
+        }))
+      : [];
 
-    const normalized3 = csv3.map((r: any) => ({
-      city: r.c,
-      district: r.q,
-      lat: parseFloat(r.lat),
-      lng: parseFloat(r.lng),
-      temp: parseFloat(r.t),
-      activated: r.activation,
-    }));
+    const normalized3 = Array.isArray(csv3)
+      ? csv3.map((r: any) => ({
+          city: r.c,
+          district: r.q,
+          lat: parseFloat(r.lat),
+          lng: parseFloat(r.lng),
+          temp: parseFloat(r.t),
+          activated: r.activation,
+        }))
+      : [];
 
     return [...normalized1, ...normalized2, ...normalized3];
   }

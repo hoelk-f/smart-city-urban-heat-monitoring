@@ -44,12 +44,12 @@ export class LeafletMapComponent implements OnInit {
         });
 
         this.fetchWeatherReportTemperature();
+
+        setInterval(() => {
+          const averageTemp = this.calculateOverallAverageTemperature();
+          this.updateTemperatureLegend(averageTemp);
+        }, 5000);
       });
-      
-      setInterval(() => {
-        const averageTemp = this.calculateOverallAverageTemperature();
-        this.updateTemperatureLegend(averageTemp);
-      }, 5000);
     }
   }
 
