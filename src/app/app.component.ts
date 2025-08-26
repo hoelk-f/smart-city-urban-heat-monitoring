@@ -12,5 +12,5 @@ import { HttpClientModule } from '@angular/common/http';
   styleUrl: './app.component.css'
 })
 export class AppComponent {
-  title = 'gesundes-tal-demonstrator';
+  title = 'smart-city-urban-heat-monitoring';
 }
