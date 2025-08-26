@@ -4,13 +4,14 @@ This project was generated with [Angular CLI](https://github.com/angular/angular
 
 ## Docker
 
+The provided Dockerfile builds the Angular app with a base href of `/smart-city-urban-heat-monitoring/` and serves the compiled files with Nginx.
 To run the application with Docker, use the included Compose file:
 
 ```
 docker compose up --build
 ```
 
-The app will be available at `http://localhost:4200/`.
+The app will be available at `http://localhost:4200/smart-city-urban-heat-monitoring/`.
 
 ## Development server
 

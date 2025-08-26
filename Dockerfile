@@ -1,25 +1,17 @@
-# Dockerfile for Smart City Urban Heat Monitoring
+# Multi-stage Dockerfile for Smart City Urban Heat Monitoring
 
-# Step 1: Use Node.js image to build and serve Angular App
-FROM node:18 AS angular-build
-
-# Set working directory inside the container
+# Stage 1: Build Angular application
+FROM node:18 AS build
 WORKDIR /app
 
-# Copy Angular project files into the container
+# Install dependencies and build the Angular app with a base href
+COPY package*.json ./
+RUN npm ci
 COPY . .
+RUN npm run build -- --configuration production --base-href /smart-city-urban-heat-monitoring/
 
-# Install Angular dependencies
-RUN npm install
-
-# Install Angular CLI globally
-RUN npm install -g @angular/cli
-
-# Build the Angular application for production
-RUN npm run build --prod
-
-# Expose the port for the Angular app (default is 4200 for ng serve)
-EXPOSE 4200
-
-# Serve the Angular application
-CMD ["ng", "serve", "--host", "0.0.0.0", "--port", "4200"]
+# Stage 2: Serve app with Nginx
+FROM nginx:alpine
+COPY --from=build /app/dist/smart-city-urban-heat-monitoring /usr/share/nginx/html/smart-city-urban-heat-monitoring
+EXPOSE 80
+CMD ["nginx", "-g", "daemon off;"]
