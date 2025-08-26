@@ -11,19 +11,3 @@ services:
       - ./src:/app/src
     environment:
       - NODE_ENV=production
-
-  caddy:
-    image: caddy:2
-    container_name: reverse_proxy_smart_city_urban_heat_monitoring
-    ports:
-      - "80:80"
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile
-      - caddy_data:/data
-      - caddy_config:/config
-    depends_on:
-      - smart-city-urban-heat-monitoring
-
-volumes:
-  caddy_data:
-  caddy_config:
