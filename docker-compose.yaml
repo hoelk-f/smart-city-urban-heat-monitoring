@@ -16,7 +16,7 @@ services:
     image: caddy:2
     container_name: reverse_proxy_smart_city_urban_heat_monitoring
     ports:
-      - "80:80"
+      - "81:80"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile
       - caddy_data:/data
