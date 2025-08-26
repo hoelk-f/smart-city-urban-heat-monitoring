@@ -1,13 +1,14 @@
 version: '3.8'
 
 services:
-  heat-monitoring-app:
+  smart-city-urban-heat-monitoring:
     build:
       context: .
-      dockerfile: Dockerfile.angular
+      dockerfile: Dockerfile
     ports:
       - "4200:4200"
     volumes:
       - ./src:/app/src
     environment:
       - NODE_ENV=production
+

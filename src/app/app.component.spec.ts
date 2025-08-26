@@ -14,16 +14,16 @@ describe('AppComponent', () => {
     expect(app).toBeTruthy();
   });
 
-  it(`should have the 'gesundes-tal-demonstrator' title`, () => {
+  it(`should have the 'smart-city-urban-heat-monitoring' title`, () => {
     const fixture = TestBed.createComponent(AppComponent);
     const app = fixture.componentInstance;
-    expect(app.title).toEqual('gesundes-tal-demonstrator');
+    expect(app.title).toEqual('smart-city-urban-heat-monitoring');
   });
 
-  it('should render title', () => {
+  it('should render map component', () => {
     const fixture = TestBed.createComponent(AppComponent);
     fixture.detectChanges();
     const compiled = fixture.nativeElement as HTMLElement;
-    expect(compiled.querySelector('h1')?.textContent).toContain('Hello, gesundes-tal-demonstrator');
+    expect(compiled.querySelector('app-leaflet-map')).toBeTruthy();
   });
 });
