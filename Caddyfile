@@ -10,9 +10,7 @@
 
 :80 {
   # Redirect root requests to the Angular application base path
-  handle / {
-    redir /smart-city-urban-heat-monitoring/
-  }
+  redir / /smart-city-urban-heat-monitoring/
 
   # Proxy all requests under the base path to the Angular container
   handle_path /smart-city-urban-heat-monitoring/* {
