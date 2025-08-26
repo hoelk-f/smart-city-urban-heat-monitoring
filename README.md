@@ -10,12 +10,12 @@ To run the application with Docker, use the included Compose file:
 docker compose up --build
 ```
 
-The app will be available at `http://localhost:4200/`.
+The app will be available at `http://localhost:4200/smart-city-urban-heat-monitoring/`.
 
 
 ## Development server
 
-Run `ng serve` for a dev server. Navigate to `http://localhost:4200/`. The application will automatically reload if you change any of the source files.
+Run `ng serve` for a dev server. Navigate to `http://localhost:4200/smart-city-urban-heat-monitoring/`. The application will automatically reload if you change any of the source files.
 
 ## Code scaffolding
 
@@ -23,7 +23,7 @@ Run `ng generate component component-name` to generate a new component. You can 
 
 ## Build
 
-Run `ng build` to build the project. The build artifacts will be stored in the `dist/` directory.
+Run `ng build` to build the project. The build artifacts will be stored in the `dist/` directory and are served under the `/smart-city-urban-heat-monitoring/` path.
 
 ## Running unit tests
 
