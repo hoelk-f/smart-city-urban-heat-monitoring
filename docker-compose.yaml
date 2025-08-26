@@ -24,6 +24,17 @@ services:
     depends_on:
       - heat-monitoring-app
 
+  # Optional: python-weather aktivieren
+  # python-weather:
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile.python
+  #   volumes:
+  #     - ./src:/app/src
+  #   environment:
+  #     - API_KEY=your_api_key
+  #   tty: true
+
 volumes:
   caddy_data:
   caddy_config:
