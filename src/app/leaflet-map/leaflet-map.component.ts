@@ -1,5 +1,6 @@
 import * as L from 'leaflet';
 import { Component, OnInit } from '@angular/core';
+import { CommonModule } from '@angular/common';
 import { HttpClient } from '@angular/common/http';
 import { MarkerData } from '../interface/MarkerData';
 import { Observable, of } from 'rxjs';
@@ -10,7 +11,8 @@ import { SensorDataService } from '../sensor-data.service';
   selector: 'app-leaflet-map',
   templateUrl: './leaflet-map.component.html',
   styleUrls: ['./leaflet-map.component.css'],
-  standalone: true
+  standalone: true,
+  imports: [CommonModule]
 })
 export class LeafletMapComponent implements OnInit {
   private map!: L.Map;
@@ -18,10 +20,50 @@ export class LeafletMapComponent implements OnInit {
   private temperatureWeatherReportLegend!: L.Control;
   private markers: L.Marker[] = [];
   
-  private weatherReportTemp: number = 18;
-  private temperatureData: any[] = [];
+  public weatherReportTemp: number = 18;
+  public temperatureData: any[] = [];
+  public averageTemperature: number = 0;
+  public activeSensorCount: number = 0;
+  public panelOpen: boolean = false;
+  public activeRegion = {
+    name: "",
+    temperatureLabel: "",
+    count: 0,
+    visible: false,
+  };
 
-  constructor(private http: HttpClient, private sensorDataService: SensorDataService) {}
+  public dataSources = {
+    geojson:
+      "https://tmdt-solid-community-server.de/solidtestpod/public/hma-wuppertal-quartiere.json",
+    sensors: [
+      "https://tmdt-solid-community-server.de/solidtestpod/public/hma-temp-1.csv",
+      "https://tmdt-solid-community-server.de/solidtestpod/public/hma-temp-2.json",
+      "https://tmdt-solid-community-server.de/solidtestpod/public/hma-temp-3.csv",
+    ],
+  };
+
+  public deviationLegend = [
+    { label: "0.2°C", color: "#008000" },
+    { label: "0.4°C", color: "#246e00" },
+    { label: "0.6°C", color: "#495b00" },
+    { label: "0.8°C", color: "#6d4900" },
+    { label: "1.0°C", color: "#db1200" },
+    { label: "> 1.2°C", color: "#ff0000" },
+  ];
+
+  public areaLegend = [
+    { label: "< 0°C", color: "#00008B" },
+    { label: "0-11°C", color: "#1E90FF" },
+    { label: "11-20°C", color: "#00CED1" },
+    { label: "20-30°C", color: "#ADFF2F" },
+    { label: "30-40°C", color: "#FFA500" },
+    { label: "> 40°C", color: "#8B0000" },
+  ];
+
+  constructor(
+    private http: HttpClient,
+    private sensorDataService: SensorDataService
+  ) {}
 
   ngOnInit(): void {
     if (typeof window !== 'undefined') {
@@ -33,10 +75,7 @@ export class LeafletMapComponent implements OnInit {
         }).addTo(this.map);
 
         this.initializeTemperatureData();
-        this.addLegend();
-        this.addDigitalShadowLegend();
-        this.addAvgTemperatureLegend();
-        this.addLogoLegend();
+        this.panelOpen = false;
 
         this.map.on('contextmenu', (e: L.LeafletMouseEvent) => {
           e.originalEvent.preventDefault();
@@ -48,9 +87,14 @@ export class LeafletMapComponent implements OnInit {
       
       setInterval(() => {
         const averageTemp = this.calculateOverallAverageTemperature();
+        this.averageTemperature = averageTemp;
         this.updateTemperatureLegend(averageTemp);
       }, 5000);
     }
+  }
+
+  togglePanel(): void {
+    this.panelOpen = !this.panelOpen;
   }
 
   private addSensorAtLocation(latlng: L.LatLng): void {
@@ -97,10 +141,7 @@ export class LeafletMapComponent implements OnInit {
   }
 
   private updateWeatherReportLegend(): void {
-    if (this.temperatureWeatherReportLegend) {
-      this.map.removeControl(this.temperatureWeatherReportLegend);
-    }
-    this.addTemperatureWeatherReportLegend(this.weatherReportTemp);
+    // handled inside the side panel
   }
 
   private addTemperatureWeatherReportLegend(temperature: number) {
@@ -116,41 +157,45 @@ export class LeafletMapComponent implements OnInit {
   }
 
   private initializeTemperatureData() {
-    this.http.get<any>('https://testpod1.solidcommunity.net/public/hma-wuppertal-quartiere.json')
-      .subscribe({
-        next: async (geoJson) => {
-          try {
-            const solidSensorData = await this.sensorDataService.loadAllSensors();
-            this.temperatureData = [];
-
-            geoJson.features.forEach((feature: any) => {
-              const quartier = parseInt(feature.properties.QUARTIER, 10);
-              const sensorData = solidSensorData.find(s =>
-                parseInt(s.district?.toString() ?? '', 10) === quartier
-              );
-
-              if (sensorData) {
-                this.temperatureData.push({
-                  temp: sensorData.temp,
-                  lat: sensorData.lat,
-                  lng: sensorData.lng,
-                  coordinates: feature.geometry.coordinates,
-                  name: feature.properties.NAME,
-                  activated: sensorData.activated
-                });
-              }
-            });
-
-            this.createMarkers();
-            this.initializePolygonLayer();
-          } catch (err) {
-            console.error('Error loading Solid Pod sensor data:', err);
-          }
-        },
-        error: (jsonError) => {
-          console.error('Error loading GeoJSON from Solid Pod:', jsonError);
+    const loadGeoJson = async () => {
+      try {
+        const geoJson = await this.http
+          .get<any>('https://tmdt-solid-community-server.de/solidtestpod/public/hma-wuppertal-quartiere.json')
+          .toPromise();
+        if (!geoJson) {
+          throw new Error('GeoJSON response empty');
         }
-      });
+
+        const solidSensorData = await this.sensorDataService.loadAllSensors();
+        this.temperatureData = [];
+
+        geoJson.features.forEach((feature: any) => {
+          const quartier = parseInt(feature.properties.QUARTIER, 10);
+          const sensorData = solidSensorData.find(s =>
+            parseInt(s.district?.toString() ?? '', 10) === quartier
+          );
+
+          if (sensorData) {
+            this.temperatureData.push({
+              temp: sensorData.temp,
+              lat: sensorData.lat,
+              lng: sensorData.lng,
+              coordinates: feature.geometry.coordinates,
+              name: feature.properties.NAME,
+              activated: sensorData.activated
+            });
+          }
+        });
+
+        this.createMarkers();
+        this.initializePolygonLayer();
+        this.activeSensorCount = this.temperatureData.filter((m) => m.activated).length;
+      } catch (err) {
+        console.error('Error loading Solid Pod sensor data:', err);
+      }
+    };
+
+    loadGeoJson();
 
     setInterval(async () => {
       try {
@@ -169,6 +214,8 @@ export class LeafletMapComponent implements OnInit {
 
         this.updateMarkers();
         const averageTemp = this.calculateOverallAverageTemperature();
+        this.averageTemperature = averageTemp;
+        this.activeSensorCount = this.temperatureData.filter((m) => m.activated).length;
         this.updateTemperatureLegend(averageTemp);
       } catch (err) {
         console.error('Failed to update sensor data:', err);
@@ -224,12 +271,13 @@ export class LeafletMapComponent implements OnInit {
           });
         };
   
-        const updateLegend = (content: string) => {
-          const legendDiv = document.getElementById('info-legend');
-          if (legendDiv) {
-            legendDiv.innerHTML = content;
-            legendDiv.style.display = 'block';
-          }
+        const updateLegend = (payload: { name: string; temperature: string; count: number }) => {
+          this.activeRegion = {
+            name: payload.name,
+            temperatureLabel: payload.temperature,
+            count: payload.count,
+            visible: true,
+          };
         };
   
         polygon.on('mouseover', (e) => {
@@ -238,29 +286,28 @@ export class LeafletMapComponent implements OnInit {
           const meanTemp = this.calculateMeanTemperature(markersInside);
           const countMarkersInside = this.countMarkersInsidePolygon(polygon);
   
-          let content = '';
+          let temperatureLabel = '';
           if (countMarkersInside === 0) {
-            content = 
-              `<strong>${data.name}</strong>` +
-              `<br><br><img src="assets/weather.png" alt="Description" style="width:14px; height:15px;"> Temperature: ${this.weatherReportTemp}°C` +
-              `<br><br> Count Sensors: ${countMarkersInside}`;
+            temperatureLabel = `Weather report ${this.weatherReportTemp}°C`;
           } else {
-            content = 
-              `<strong>${data.name}</strong>` +
-              `<br><br><img src="assets/sensor.png" alt="Description" style="width:14px; height:15px;"> ⌀ Temperature: ${meanTemp.toFixed(2)}°C` +
-              `<br><br> Count Sensors: ${countMarkersInside}`;
+            temperatureLabel = `Avg. ${meanTemp.toFixed(2)}°C`;
           }
   
-          updateLegend(content);
+          updateLegend({
+            name: data.name || "Area",
+            temperature: temperatureLabel,
+            count: countMarkersInside,
+          });
         });
   
         polygon.on('mouseout', (e) => {
           resetPolygonStyle();
-          updateLegend('');
-          const legendDiv = document.getElementById('info-legend');
-          if (legendDiv) {
-            legendDiv.style.display = 'none';
-          }
+          this.activeRegion = {
+            name: "",
+            temperatureLabel: "",
+            count: 0,
+            visible: false,
+          };
         });
   
         polygon.on('click', (e) => {
@@ -379,10 +426,7 @@ export class LeafletMapComponent implements OnInit {
   }
 
   private updateTemperatureLegend(averageTemp: number) {
-    if (this.temperatureLegend) {
-      this.map.removeControl(this.temperatureLegend);
-    }
-    this.addTemperatureLegend(averageTemp);
+    // handled inside the side panel
   }
 
   private addLegend() {

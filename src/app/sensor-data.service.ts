@@ -8,9 +8,9 @@ export class SensorDataService {
 
   async loadAllSensors(): Promise<any[]> {
     const [csv1, json2, csv3] = await Promise.all([
-      this.loadCSV('https://testpod1.solidcommunity.net/public/hma-temp-1.csv'),
-      this.http.get<any[]>('https://testpodfu.solidcommunity.net/public/hma-temp-2.json').toPromise(),
-      this.loadCSV('https://testpodfh.solidcommunity.net/public/hma-temp-3.csv'),
+      this.loadCSV('https://tmdt-solid-community-server.de/solidtestpod/public/hma-temp-1.csv'),
+      this.loadJson('https://tmdt-solid-community-server.de/solidtestpod/public/hma-temp-2.json'),
+      this.loadCSV('https://tmdt-solid-community-server.de/solidtestpod/public/hma-temp-3.csv'),
     ]);
 
     const normalized1 = csv1.map((r: any) => ({
@@ -53,5 +53,13 @@ export class SensorDataService {
         complete: (results: Papa.ParseResult<any>) => resolve(results.data),
       });
     });
+  }
+
+  private async loadJson(url: string): Promise<any[]> {
+    const res = await fetch(url);
+    if (!res.ok) {
+      throw new Error(`Failed to load ${url} (${res.status})`);
+    }
+    return res.json();
   }
 }

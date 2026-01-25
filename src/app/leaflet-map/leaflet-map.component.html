@@ -1,3 +1,102 @@
-<div id="map">
-    <div id="info-legend"></div>
+<div class="map-shell">
+    <div id="map"></div>
+
+    <button class="panel-toggle" (click)="togglePanel()" aria-label="Toggle info panel">
+        <i class="fa-solid fa-circle-info"></i>
+    </button>
+
+    <aside class="info-panel" [class.open]="panelOpen">
+        <div class="panel-header">
+            <div>
+                <div class="panel-title">Urban Heat Monitoring</div>
+                <div class="panel-subtitle">Live overview & data sources</div>
+            </div>
+            <button class="panel-close" (click)="togglePanel()" aria-label="Close panel">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+
+        <div class="panel-section">
+            <div class="section-title">Overview</div>
+            <div class="stat-grid">
+                <div class="stat-card">
+                    <span>Average temperature</span>
+                    <strong>{{ averageTemperature.toFixed(2) }} °C</strong>
+                </div>
+                <div class="stat-card">
+                    <span>Weather report</span>
+                    <strong>{{ weatherReportTemp.toFixed(2) }} °C</strong>
+                </div>
+                <div class="stat-card">
+                    <span>Active sensors</span>
+                    <strong>{{ activeSensorCount }} / {{ temperatureData.length }}</strong>
+                </div>
+            </div>
+        </div>
+
+        <div class="panel-section" *ngIf="activeRegion.visible">
+            <div class="section-title">Active area</div>
+            <div class="active-area-card">
+                <div class="active-area-name">{{ activeRegion.name }}</div>
+                <div class="active-area-meta">
+                    <span>{{ activeRegion.temperatureLabel }}</span>
+                    <span>•</span>
+                    <span>{{ activeRegion.count }} sensors</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="panel-section">
+            <div class="section-title">Integrated data sources</div>
+            <div class="source-block">
+                <div class="source-title">GeoJSON</div>
+                <a class="source-item" [href]="dataSources.geojson" target="_blank" rel="noopener">
+                    {{ dataSources.geojson }}
+                </a>
+            </div>
+            <div class="source-block">
+                <div class="source-title">Sensor feeds</div>
+                <div class="source-list">
+                    <a
+                        class="source-item"
+                        *ngFor="let source of dataSources.sensors"
+                        [href]="source"
+                        target="_blank"
+                        rel="noopener"
+                    >
+                        {{ source }}
+                    </a>
+                </div>
+            </div>
+            <div class="source-footnote">Loaded from connected Solid Pods</div>
+        </div>
+
+        <div class="panel-section">
+            <div class="section-title">Legends</div>
+            <div class="legend-block">
+                <div class="legend-title">Temperature deviation (border)</div>
+                <div class="legend-items">
+                    <div class="legend-item" *ngFor="let entry of deviationLegend">
+                        <span class="legend-dot" [style.background]="entry.color"></span>
+                        <span>{{ entry.label }}</span>
+                    </div>
+                </div>
+            </div>
+            <div class="legend-block">
+                <div class="legend-title">Temperature (area)</div>
+                <div class="legend-items">
+                    <div class="legend-item" *ngFor="let entry of areaLegend">
+                        <span class="legend-dot" [style.background]="entry.color"></span>
+                        <span>{{ entry.label }}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="panel-section logos">
+            <img src="assets/images/Icon_GesundesTal.png" alt="Gesundes Tal Logo">
+            <img src="assets/images/KFW.svg" alt="KFW Logo">
+            <img src="assets/images/BMWSB.png" alt="BMWSB Logo">
+        </div>
+    </aside>
 </div>
