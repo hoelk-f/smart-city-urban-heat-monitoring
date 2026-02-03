@@ -4,6 +4,14 @@
     <button class="panel-toggle" (click)="togglePanel()" aria-label="Toggle info panel">
         <i class="fa-solid fa-circle-info"></i>
     </button>
+    <div class="hover-info" *ngIf="activeRegion.visible">
+        <div class="hover-info-name">{{ activeRegion.name }}</div>
+        <div class="hover-info-meta">
+            <span>{{ activeRegion.temperatureLabel }}</span>
+            <span>•</span>
+            <span>{{ activeRegion.count }} sensors</span>
+        </div>
+    </div>
 
     <aside class="info-panel" [class.open]="panelOpen">
         <div class="panel-header">
@@ -34,17 +42,6 @@
             </div>
         </div>
 
-        <div class="panel-section" *ngIf="activeRegion.visible">
-            <div class="section-title">Active area</div>
-            <div class="active-area-card">
-                <div class="active-area-name">{{ activeRegion.name }}</div>
-                <div class="active-area-meta">
-                    <span>{{ activeRegion.temperatureLabel }}</span>
-                    <span>•</span>
-                    <span>{{ activeRegion.count }} sensors</span>
-                </div>
-            </div>
-        </div>
 
         <div class="panel-section">
             <div class="section-title">Integrated data sources</div>
@@ -100,3 +97,10 @@
         </div>
     </aside>
 </div>
+
+
+
+
+
+
+

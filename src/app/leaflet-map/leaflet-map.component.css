@@ -249,3 +249,38 @@
     width: auto;
     opacity: 0.9;
 }
+
+.hover-info {
+    position: absolute;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 1150;
+    background: rgba(15, 23, 42, 0.75);
+    color: #f8fafc;
+    border: 1px solid rgba(148, 163, 184, 0.35);
+    border-radius: 12px;
+    padding: 8px 14px;
+    box-shadow: 0 10px 22px rgba(15, 23, 42, 0.35);
+    backdrop-filter: blur(8px);
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    align-items: center;
+    text-align: center;
+    pointer-events: none;
+    max-width: calc(100% - 120px);
+}
+
+.hover-info-name {
+    font-weight: 700;
+    font-size: 0.9rem;
+}
+
+.hover-info-meta {
+    font-size: 0.78rem;
+    color: #cbd5f5;
+    display: flex;
+    gap: 6px;
+    align-items: center;
+}
