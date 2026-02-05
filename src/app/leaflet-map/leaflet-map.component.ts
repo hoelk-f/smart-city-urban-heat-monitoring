@@ -76,22 +76,22 @@ export class LeafletMapComponent implements OnInit, OnDestroy {
   };
 
   public deviationLegend = [
-    { label: '0.2Â°C', color: '#008000' },
-    { label: '0.4Â°C', color: '#246e00' },
-    { label: '0.6Â°C', color: '#495b00' },
-    { label: '0.8Â°C', color: '#6d4900' },
-    { label: '1.0Â°C', color: '#db1200' },
-    { label: '> 1.2Â°C', color: '#ff0000' },
+    { label: '0.2 C', color: '#008000' },
+    { label: '0.4 C', color: '#246e00' },
+    { label: '0.6 C', color: '#495b00' },
+    { label: '0.8 C', color: '#6d4900' },
+    { label: '1.0 C', color: '#db1200' },
+    { label: '> 1.2 C', color: '#ff0000' },
   ];
 
   public areaLegend = [
-    { label: '< 0Â°C', color: '#00008B' },
-    { label: '0-6Â°C', color: '#1E90FF' },
-    { label: '6-11Â°C', color: '#00CED1' },
-    { label: '11-20Â°C', color: '#ADFF2F' },
-    { label: '20-30Â°C', color: '#ADFF2F' },
-    { label: '30-40Â°C', color: '#FFA500' },
-    { label: '> 40Â°C', color: '#8B0000' },
+    { label: '< 0 C', color: '#00008B' },
+    { label: '0-6 C', color: '#1E90FF' },
+    { label: '6-11 C', color: '#00CED1' },
+    { label: '11-20 C', color: '#ADFF2F' },
+    { label: '20-30 C', color: '#ADFF2F' },
+    { label: '30-40 C', color: '#FFA500' },
+    { label: '> 40 C', color: '#8B0000' },
   ];
 
   constructor(
@@ -108,7 +108,7 @@ export class LeafletMapComponent implements OnInit, OnDestroy {
     this.map = L.map('map').setView([51.2562, 7.1508], 12);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19,
-      attribution: 'Â© OpenStreetMap contributors',
+      attribution: '(c) OpenStreetMap contributors',
     }).addTo(this.map);
 
     this.map.on('contextmenu', (e: L.LeafletMouseEvent) => {
@@ -368,7 +368,7 @@ export class LeafletMapComponent implements OnInit, OnDestroy {
     const title = entry.sourceTitle ? this.escapeHtml(entry.sourceTitle) : 'Sensor';
     return `<div style="min-width:260px"><strong>${title}</strong><br/>Temperature: ${entry.temp.toFixed(
       2
-    )}�C<br/><div style="margin-top:6px">${chartSvg}</div></div>`;
+    )} C<br/><div style="margin-top:6px">${chartSvg}</div></div>`;
   }
   private getIconPath(entry: TemperatureEntry): string {
     if (!entry.activated) return 'assets/stationary_sensor_disabled.png';
@@ -403,7 +403,7 @@ export class LeafletMapComponent implements OnInit, OnDestroy {
         const count = this.countMarkersInsidePolygon(polygon);
         this.activeRegion = {
           name: entry.name || 'Area',
-          temperatureLabel: count === 0 ? `Weather report ${this.weatherReportTemp}Â°C` : `Avg. ${meanTemp.toFixed(2)}Â°C`,
+          temperatureLabel: count === 0 ? `Weather report ${this.weatherReportTemp} C` : `Avg. ${meanTemp.toFixed(2)} C`,
           count,
           visible: true,
         };
@@ -618,9 +618,9 @@ export class LeafletMapComponent implements OnInit, OnDestroy {
       <polyline points="${points}" fill="none" stroke="#2563eb" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
       ${circles}
       ${labels}
-      <text x="${(padLeft - 6).toFixed(2)}" y="${yMax.toFixed(2)}" font-size="10" text-anchor="end" fill="#334155">${max.toFixed(1)}�C</text>
-      <text x="${(padLeft - 6).toFixed(2)}" y="${yMid.toFixed(2)}" font-size="10" text-anchor="end" fill="#334155">${mid.toFixed(1)}�C</text>
-      <text x="${(padLeft - 6).toFixed(2)}" y="${yMin.toFixed(2)}" font-size="10" text-anchor="end" fill="#334155">${min.toFixed(1)}�C</text>
+      <text x="${(padLeft - 6).toFixed(2)}" y="${yMax.toFixed(2)}" font-size="10" text-anchor="end" fill="#334155">${max.toFixed(1)} C</text>
+      <text x="${(padLeft - 6).toFixed(2)}" y="${yMid.toFixed(2)}" font-size="10" text-anchor="end" fill="#334155">${mid.toFixed(1)} C</text>
+      <text x="${(padLeft - 6).toFixed(2)}" y="${yMin.toFixed(2)}" font-size="10" text-anchor="end" fill="#334155">${min.toFixed(1)} C</text>
       <text x="${padLeft}" y="${(height - 8).toFixed(2)}" font-size="10" text-anchor="start" fill="#334155">oldest</text>
       <text x="${(padLeft + chartW).toFixed(2)}" y="${(height - 8).toFixed(2)}" font-size="10" text-anchor="end" fill="#334155">newest</text>
     </svg>`;
@@ -640,3 +640,4 @@ export class LeafletMapComponent implements OnInit, OnDestroy {
     return fallback;
   }
 }
+
