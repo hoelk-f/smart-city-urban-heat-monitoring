@@ -10,6 +10,9 @@
   },
   "private": true,
   "dependencies": {
+    "@inrupt/solid-client": "^2.1.0",
+    "@inrupt/solid-client-authn-browser": "^3.3.2",
+    "@inrupt/vocab-common-rdf": "^1.0.5",
     "@angular/animations": "^17.0.0",
     "@angular/common": "^17.0.0",
     "@angular/compiler": "^17.0.0",

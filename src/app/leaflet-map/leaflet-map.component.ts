@@ -1,213 +1,420 @@
 import * as L from 'leaflet';
-import { Component, OnInit } from '@angular/core';
+import { Component, OnDestroy, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { HttpClient } from '@angular/common/http';
 import { MarkerData } from '../interface/MarkerData';
 import { SensorDataService } from '../sensor-data.service';
+import {
+  AccessDecisionItem,
+  DataspaceSourceService,
+  DecisionState,
+  TempJsonSource,
+} from '../dataspace-source.service';
+import { SolidAuthService } from '../solid-auth.service';
+
+interface TemperatureEntry {
+  temp: number;
+  lat: number;
+  lng: number;
+  activated: boolean;
+  coordinates?: number[][][];
+  name?: string;
+  polygonLayer?: L.Polygon;
+  sourceKey?: string;
+  sourceTitle?: string;
+}
+
+interface IntegratedSource {
+  key: string;
+  title: string;
+  accessUrl: string;
+  isPublic: boolean;
+}
+
+interface StoredRequestState {
+  state: DecisionState;
+  updatedAt: string;
+  expiresAt?: string;
+}
+
+const REQUEST_STATE_KEY = 'uhm.request.state.v1';
 
 @Component({
   selector: 'app-leaflet-map',
   templateUrl: './leaflet-map.component.html',
   styleUrls: ['./leaflet-map.component.css'],
   standalone: true,
-  imports: [CommonModule]
+  imports: [CommonModule],
 })
-export class LeafletMapComponent implements OnInit {
+export class LeafletMapComponent implements OnInit, OnDestroy {
   private map!: L.Map;
-  private temperatureLegend!: L.Control;
-  private temperatureWeatherReportLegend!: L.Control;
   private markers: L.Marker[] = [];
-  private readonly simulationIntervalMs = 5000;
+  private readonly simulationIntervalMs = 10000;
+  private readonly decisionPollingIntervalMs = 10000;
   private readonly simulationDelta = 0.4;
   private readonly minSimulatedTemp = -10;
   private readonly maxSimulatedTemp = 50;
-  
-  public weatherReportTemp: number = 6.8;
-  public temperatureData: any[] = [];
-  public averageTemperature: number = 0;
-  public activeSensorCount: number = 0;
-  public panelOpen: boolean = false;
+  private simulationTimerId?: number;
+  private polygonTimerId?: number;
+  private decisionTimerId?: number;
+
+  public weatherReportTemp = 6.8;
+  public temperatureData: TemperatureEntry[] = [];
+  public averageTemperature = 0;
+  public activeSensorCount = 0;
+  public panelOpen = false;
+  public sourceModalOpen = false;
+  public sourceLoading = false;
+  public sourceError = '';
+  public requestError = '';
+  public pollingError = '';
+  public requesterWebId = this.dataspaceSourceService.getRequesterWebId();
+  public isLoggedIn = false;
+  public currentWebId = '';
   public activeRegion = {
-    name: "",
-    temperatureLabel: "",
+    name: '',
+    temperatureLabel: '',
     count: 0,
     visible: false,
   };
 
+  public publicSources: TempJsonSource[] = [];
+  public restrictedSources: TempJsonSource[] = [];
+  public integratedSources: IntegratedSource[] = [];
+  public decisionBySourceKey = new Map<string, AccessDecisionItem>();
+  public requestStateBySourceKey: Record<string, StoredRequestState> = {};
+
   public dataSources = {
     geojson:
-      "https://tmdt-solid-community-server.de/solidtestpod/public/hma-wuppertal-quartiere.json",
+      'https://tmdt-solid-community-server.de/solidtestpod/public/hma-wuppertal-quartiere.json',
     sensors: [
-      "https://tmdt-solid-community-server.de/solidtestpod/public/hma-temp-1.csv",
-      "https://tmdt-solid-community-server.de/solidtestpod/public/hma-temp-2.json",
-      "https://tmdt-solid-community-server.de/solidtestpod/public/hma-temp-3.csv",
+      'https://tmdt-solid-community-server.de/solidtestpod/public/hma-temp-1.csv',
+      'https://tmdt-solid-community-server.de/solidtestpod/public/hma-temp-2.json',
+      'https://tmdt-solid-community-server.de/solidtestpod/public/hma-temp-3.csv',
     ],
   };
 
   public deviationLegend = [
-    { label: "0.2°C", color: "#008000" },
-    { label: "0.4°C", color: "#246e00" },
-    { label: "0.6°C", color: "#495b00" },
-    { label: "0.8°C", color: "#6d4900" },
-    { label: "1.0°C", color: "#db1200" },
-    { label: "> 1.2°C", color: "#ff0000" },
+    { label: '0.2Â°C', color: '#008000' },
+    { label: '0.4Â°C', color: '#246e00' },
+    { label: '0.6Â°C', color: '#495b00' },
+    { label: '0.8Â°C', color: '#6d4900' },
+    { label: '1.0Â°C', color: '#db1200' },
+    { label: '> 1.2Â°C', color: '#ff0000' },
   ];
 
   public areaLegend = [
-    { label: "< 0°C", color: "#00008B" },
-    { label: "0-6°C", color: "#1E90FF" },
-    { label: "6-11°C", color: "#00CED1" },
-    { label: "11-20°C", color: "#ADFF2F" },
-    { label: "20-30°C", color: "#ADFF2F" },
-    { label: "30-40°C", color: "#FFA500" },
-    { label: "> 40°C", color: "#8B0000" },
+    { label: '< 0Â°C', color: '#00008B' },
+    { label: '0-6Â°C', color: '#1E90FF' },
+    { label: '6-11Â°C', color: '#00CED1' },
+    { label: '11-20Â°C', color: '#ADFF2F' },
+    { label: '20-30Â°C', color: '#ADFF2F' },
+    { label: '30-40Â°C', color: '#FFA500' },
+    { label: '> 40Â°C', color: '#8B0000' },
   ];
 
   constructor(
     private http: HttpClient,
-    private sensorDataService: SensorDataService
+    private sensorDataService: SensorDataService,
+    private dataspaceSourceService: DataspaceSourceService,
+    private authService: SolidAuthService
   ) {}
 
   ngOnInit(): void {
-    if (typeof window !== 'undefined') {
-      import('leaflet').then(L => {
-        this.map = L.map('map').setView([51.2562, 7.1508], 12);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-          maxZoom: 19,
-          attribution: '© OpenStreetMap contributors'
-        }).addTo(this.map);
+    this.loadRequestStateFromStorage();
 
-        this.initializeTemperatureData();
-        this.panelOpen = false;
-
-        this.map.on('contextmenu', (e: L.LeafletMouseEvent) => {
-          e.originalEvent.preventDefault();
-          this.addSensorAtLocation(e.latlng);
-        });
-
-        this.fetchWeatherReportTemperature();
-      });
-      
-      setInterval(() => {
-        const averageTemp = this.calculateOverallAverageTemperature();
-        this.averageTemperature = averageTemp;
-        this.updateTemperatureLegend(averageTemp);
-      }, this.simulationIntervalMs);
+    if (typeof window === 'undefined') {
+      return;
     }
+
+    this.map = L.map('map').setView([51.2562, 7.1508], 12);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: 'Ã‚© OpenStreetMap contributors',
+    }).addTo(this.map);
+
+    this.map.on('contextmenu', (e: L.LeafletMouseEvent) => {
+      e.originalEvent.preventDefault();
+      this.addSensorAtLocation(e.latlng);
+    });
+
+    this.initializeTemperatureData();
+    this.fetchWeatherReportTemperature();
+    this.startSimulationLoop();
+    this.startDecisionPolling();
+    void this.restoreAuthSession();
+  }
+
+  ngOnDestroy(): void {
+    if (this.simulationTimerId) window.clearInterval(this.simulationTimerId);
+    if (this.polygonTimerId) window.clearInterval(this.polygonTimerId);
+    if (this.decisionTimerId) window.clearInterval(this.decisionTimerId);
   }
 
   togglePanel(): void {
     this.panelOpen = !this.panelOpen;
   }
 
-  private addSensorAtLocation(latlng: L.LatLng): void {
-    let tempValueString: string | null = prompt("Please enter the temperature value:", "");
+  openSourceModal(): void {
+    this.sourceModalOpen = true;
+    this.requesterWebId = this.authService.webId() || this.dataspaceSourceService.getRequesterWebId();
+    this.loadDiscoverableSources();
+  }
 
-    if (tempValueString !== null && tempValueString.trim() !== "" && !isNaN(Number(tempValueString))) {
-      const tempValue: number = Number(tempValueString);
-      const marker = L.marker(latlng, {icon: this.createIconStatic('assets/temperature.png')}).addTo(this.map);
-      
+  closeSourceModal(): void {
+    this.sourceModalOpen = false;
+    this.sourceError = '';
+    this.requestError = '';
+  }
+
+  async loadDiscoverableSources(): Promise<void> {
+    this.sourceLoading = true;
+    this.sourceError = '';
+    try {
+      const discovered = await this.dataspaceSourceService.discoverTempJsonSources();
+      this.publicSources = discovered.filter((item) => item.isPublic);
+      this.restrictedSources = discovered.filter((item) => !item.isPublic);
+    } catch (err) {
+      this.sourceError = this.toErrorMessage(err, 'Could not load discoverable data sources.');
+    } finally {
+      this.sourceLoading = false;
+    }
+  }
+
+  async integratePublicSource(source: TempJsonSource): Promise<void> {
+    await this.integrateSource(source, true);
+  }
+
+  async requestRestrictedSource(source: TempJsonSource): Promise<void> {
+    if (!this.isLoggedIn) {
+      this.requestError = 'Please sign in first to request restricted sources.';
+      return;
+    }
+
+    if (this.isSourceIntegrated(source.key)) {
+      this.requestError = 'Source is already integrated.';
+      return;
+    }
+
+    const currentState = this.getRestrictedState(source);
+    if (currentState === 'denied' || currentState === 'revoked' || currentState === 'expired') {
+      this.requestError = 'Access for this source was denied or is no longer valid.';
+      return;
+    }
+
+    if (currentState === 'pending') {
+      return;
+    }
+
+    if (currentState === 'approved') {
+      await this.integrateSource(source, false);
+      return;
+    }
+
+    this.requestError = '';
+    try {
+      await this.dataspaceSourceService.requestRestrictedAccess(
+        source,
+        'Temperature monitoring integration request from Smart City Urban Heat Monitoring.'
+      );
+      this.requestStateBySourceKey[source.key] = {
+        state: 'pending',
+        updatedAt: new Date().toISOString(),
+      };
+      this.persistRequestState();
+    } catch (err) {
+      this.requestError = this.toErrorMessage(err, 'Access request could not be sent.');
+    }
+  }
+
+  async integrateRestrictedSource(source: TempJsonSource): Promise<void> {
+    await this.integrateSource(source, false);
+  }
+
+  removeIntegratedSource(sourceKey: string): void {
+    this.integratedSources = this.integratedSources.filter((source) => source.key !== sourceKey);
+    this.temperatureData = this.temperatureData.filter((entry) => entry.sourceKey !== sourceKey);
+    this.rebuildMarkers();
+    this.recalculateStats();
+  }
+
+  getRestrictedState(source: TempJsonSource): DecisionState {
+    const fromDecision = this.decisionBySourceKey.get(source.key);
+    if (fromDecision) {
+      return fromDecision.state;
+    }
+    const fromRequest = this.requestStateBySourceKey[source.key];
+    return fromRequest?.state || 'none';
+  }
+
+  isRestrictedDisabled(source: TempJsonSource): boolean {
+    const state = this.getRestrictedState(source);
+    return state === 'denied' || state === 'revoked' || state === 'expired';
+  }
+
+  isSourceIntegrated(sourceKey: string): boolean {
+    return this.integratedSources.some((source) => source.key === sourceKey);
+  }
+
+  private async integrateSource(source: TempJsonSource, allowPublicOnly: boolean): Promise<void> {
+    this.requestError = '';
+
+    if (this.isSourceIntegrated(source.key)) {
+      this.requestError = 'Source is already integrated.';
+      return;
+    }
+
+    if (!source.isPublic && !allowPublicOnly) {
+      const state = this.getRestrictedState(source);
+      if (state !== 'approved') {
+        this.requestError = 'Restricted source can only be integrated after approval.';
+        return;
+      }
+    }
+
+    if (!source.isPublic && allowPublicOnly) {
+      this.requestError = 'Restricted source must be requested first.';
+      return;
+    }
+
+    try {
+      const latest = await this.dataspaceSourceService.loadLatestReading(source.accessUrl);
       this.temperatureData.push({
-        lat: latlng.lat,
-        lng: latlng.lng,
-        temp: tempValue,
-        activated: true
+        temp: latest.temperature,
+        lat: latest.lat,
+        lng: latest.lng,
+        activated: true,
+        sourceKey: source.key,
+        sourceTitle: source.title,
       });
-
-      marker.bindPopup(`Temperature: ${tempValue}°C`).openTooltip();
-
-      marker.on('contextmenu', () => {
-        this.map.removeLayer(marker);
-        this.temperatureData = this.temperatureData.filter(md => md.lat !== latlng.lat || md.lng !== latlng.lng);
+      this.integratedSources.push({
+        key: source.key,
+        title: source.title,
+        accessUrl: source.accessUrl,
+        isPublic: source.isPublic,
       });
-    } else {
-      alert("Please enter a valid temperature value.");
+      this.rebuildMarkers();
+      this.recalculateStats();
+    } catch (err) {
+      this.requestError = this.toErrorMessage(err, 'Could not integrate data source.');
     }
   }
 
   private fetchWeatherReportTemperature(): void {
-    this.http.get('assets/weatherreportapi.csv', { responseType: 'text' }).subscribe(
-      (data) => {
+    this.http.get('assets/weatherreportapi.csv', { responseType: 'text' }).subscribe({
+      next: (data) => {
         const rows = data.split('\n');
         if (rows.length > 1) {
-          const [timestamp, temperature] = rows[1].split(',');
-          this.weatherReportTemp = parseFloat(temperature);
-        } else {
-          console.error('No data found in weatherreportapi.csv');
+          const [, temperature] = rows[1].split(',');
+          const parsed = Number(temperature);
+          if (!Number.isNaN(parsed)) {
+            this.weatherReportTemp = parsed;
+          }
         }
-        this.updateWeatherReportLegend();
       },
-      (error) => {
+      error: (error) => {
+        // Keep the default fallback if CSV is unavailable.
         console.error('Error loading weather report CSV:', error);
+      },
+    });
+  }
+
+  private async initializeTemperatureData(): Promise<void> {
+    try {
+      const geoJson = await this.http
+        .get<any>('https://tmdt-solid-community-server.de/solidtestpod/public/hma-wuppertal-quartiere.json')
+        .toPromise();
+      if (!geoJson) {
+        throw new Error('GeoJSON response empty');
       }
-    );
-  }
 
-  private updateWeatherReportLegend(): void {
-    // handled inside the side panel
-  }
+      const solidSensorData = await this.sensorDataService.loadAllSensors();
+      this.temperatureData = [];
 
-  private addTemperatureWeatherReportLegend(temperature: number) {
-    this.temperatureWeatherReportLegend = new L.Control({ position: 'topright' });
+      geoJson.features.forEach((feature: any) => {
+        const district = parseInt(feature.properties.QUARTIER, 10);
+        const sensorData = solidSensorData.find(
+          (sensor) => parseInt(sensor.district?.toString() ?? '', 10) === district
+        );
 
-    this.temperatureWeatherReportLegend.onAdd = (map) => {
-      const div = L.DomUtil.create('div', 'info legend');
-      div.innerHTML = `<h6>Weather Report</h6>${temperature.toFixed(2)} °C`;
-      return div;
-    };
-
-    this.temperatureWeatherReportLegend.addTo(this.map);
-  }
-
-  private initializeTemperatureData() {
-    const loadGeoJson = async () => {
-      try {
-        const geoJson = await this.http
-          .get<any>('https://tmdt-solid-community-server.de/solidtestpod/public/hma-wuppertal-quartiere.json')
-          .toPromise();
-        if (!geoJson) {
-          throw new Error('GeoJSON response empty');
+        if (sensorData) {
+          this.temperatureData.push({
+            temp: sensorData.temp,
+            lat: sensorData.lat,
+            lng: sensorData.lng,
+            coordinates: feature.geometry.coordinates,
+            name: feature.properties.NAME,
+            activated: sensorData.activated,
+          });
         }
+      });
 
-        const solidSensorData = await this.sensorDataService.loadAllSensors();
-        this.temperatureData = [];
+      this.rebuildMarkers();
+      this.initializePolygonLayer();
+      this.recalculateStats();
+    } catch (err) {
+      console.error('Error loading base Solid Pod sensor data:', err);
+    }
+  }
 
-        geoJson.features.forEach((feature: any) => {
-          const quartier = parseInt(feature.properties.QUARTIER, 10);
-          const sensorData = solidSensorData.find(s =>
-            parseInt(s.district?.toString() ?? '', 10) === quartier
-          );
+  private startSimulationLoop(): void {
+    this.simulationTimerId = window.setInterval(() => {
+      this.simulateSensorVariation();
+      this.updateMarkerPopupsAndIcons();
+      this.recalculateStats();
+    }, this.simulationIntervalMs);
+  }
 
-          if (sensorData) {
-            this.temperatureData.push({
-              temp: sensorData.temp,
-              lat: sensorData.lat,
-              lng: sensorData.lng,
-              coordinates: feature.geometry.coordinates,
-              name: feature.properties.NAME,
-              activated: sensorData.activated
-            });
+  private startDecisionPolling(): void {
+    const poll = async () => {
+      try {
+        this.pollingError = '';
+        const decisions = await this.dataspaceSourceService.loadDecisionStateBySourceKey();
+        this.decisionBySourceKey = decisions;
+        decisions.forEach((decision, key) => {
+          this.requestStateBySourceKey[key] = {
+            state: decision.state,
+            updatedAt: decision.decidedAt || new Date().toISOString(),
+            expiresAt: decision.expiresAt || '',
+          };
+        });
+        this.persistRequestState();
+
+        const revokedKeys = new Set<string>();
+        this.integratedSources.forEach((source) => {
+          if (source.isPublic) return;
+          const state = this.getRestrictedState({ ...source, identifier: source.key, ownerWebId: '', key: source.key });
+          if (state === 'denied' || state === 'revoked' || state === 'expired') {
+            revokedKeys.add(source.key);
           }
         });
-
-        this.createMarkers();
-        this.initializePolygonLayer();
-        this.activeSensorCount = this.temperatureData.filter((m) => m.activated).length;
+        if (revokedKeys.size > 0) {
+          this.temperatureData = this.temperatureData.filter((entry) => !entry.sourceKey || !revokedKeys.has(entry.sourceKey));
+          this.integratedSources = this.integratedSources.filter((source) => !revokedKeys.has(source.key));
+          this.rebuildMarkers();
+          this.recalculateStats();
+        }
       } catch (err) {
-        console.error('Error loading Solid Pod sensor data:', err);
+        this.pollingError = this.toErrorMessage(err, 'Decision polling failed. Retrying automatically.');
       }
     };
 
-    loadGeoJson();
+    void poll();
+    this.decisionTimerId = window.setInterval(() => {
+      void poll();
+    }, this.decisionPollingIntervalMs);
+  }
 
-    setInterval(() => {
-      this.simulateSensorVariation();
-      this.updateMarkers();
-      const averageTemp = this.calculateOverallAverageTemperature();
-      this.averageTemperature = averageTemp;
-      this.activeSensorCount = this.temperatureData.filter((m) => m.activated).length;
-      this.updateTemperatureLegend(averageTemp);
-    }, this.simulationIntervalMs);
+  async login(): Promise<void> {
+    this.requestError = '';
+    await this.authService.login();
+  }
+
+  async logout(): Promise<void> {
+    await this.authService.logout();
+    this.isLoggedIn = false;
+    this.currentWebId = '';
+    this.requesterWebId = this.dataspaceSourceService.getRequesterWebId();
   }
 
   private simulateSensorVariation(): void {
@@ -222,186 +429,165 @@ export class LeafletMapComponent implements OnInit {
     return Math.min(max, Math.max(min, value));
   }
 
-  private updateMarkers() {
-    this.temperatureData.forEach((data, index) => {
-      if (this.markers[index]) {
-        const marker = this.markers[index];
-        const popupContent = `Temperature: ${data.temp}°C`;
-        marker.setLatLng([data.lat, data.lng]);
-        marker.getPopup()?.setContent(popupContent);
+  private rebuildMarkers(): void {
+    this.markers.forEach((marker) => this.map.removeLayer(marker));
+    this.markers = [];
 
-        const iconPath = data.activated ? 'assets/stationary_sensor.png' : 'assets/stationary_sensor_disabled.png';
-        marker.setIcon(this.createIconStatic(iconPath));
-      }
+    this.temperatureData.forEach((data) => {
+      const iconPath = data.activated ? 'assets/stationary_sensor.png' : 'assets/stationary_sensor_disabled.png';
+      const marker = L.marker([data.lat, data.lng], { icon: this.createIconStatic(iconPath) });
+      marker.bindPopup(this.buildPopupContent(data));
+
+      marker.on('contextmenu', () => {
+        data.activated = !data.activated;
+        const newIconPath = data.activated ? 'assets/stationary_sensor.png' : 'assets/stationary_sensor_disabled.png';
+        marker.setIcon(this.createIconStatic(newIconPath));
+      });
+
+      marker.addTo(this.map);
+      this.markers.push(marker);
     });
-  }  
+  }
+
+  private updateMarkerPopupsAndIcons(): void {
+    this.temperatureData.forEach((entry, index) => {
+      const marker = this.markers[index];
+      if (!marker) return;
+      marker.getPopup()?.setContent(this.buildPopupContent(entry));
+      marker.setIcon(
+        this.createIconStatic(entry.activated ? 'assets/stationary_sensor.png' : 'assets/stationary_sensor_disabled.png')
+      );
+    });
+  }
+
+  private buildPopupContent(entry: TemperatureEntry): string {
+    if (entry.sourceTitle) {
+      return `${entry.sourceTitle}<br/>Temperature: ${entry.temp.toFixed(2)}Â°C`;
+    }
+    return `Temperature: ${entry.temp.toFixed(2)}Â°C`;
+  }
+
+  private createIconStatic(path: string): L.Icon {
+    return L.icon({
+      iconUrl: path,
+      iconSize: [25, 26],
+      iconAnchor: [5, 30],
+      popupAnchor: [7, -30],
+    });
+  }
 
   private initializePolygonLayer(): void {
-    this.temperatureData.forEach(data => {
-      if (data.coordinates) {
-        
-        const polygon = L.polygon(data.coordinates, {
-          fillColor: this.getColorByAvgTemp(0),
-          fillOpacity: 0.4,
-          color: this.getColor(1),
-          weight: 2
-        }).addTo(this.map);
-  
-        const updatePolygonStyle = () => {
-          const markersInside = this.getMarkersInsidePolygon(polygon);
-          const meanTemp = this.calculateMeanTemperature(markersInside);
-          const tempDiff = Math.abs(meanTemp - this.weatherReportTemp);
-          polygon.setStyle({
-            fillColor: this.getColorByAvgTemp(meanTemp),
-            color: this.getColor(tempDiff),
-            fillOpacity: 0.4
-          });
+    this.temperatureData.forEach((entry) => {
+      if (!entry.coordinates) return;
+
+      const polygon = L.polygon(entry.coordinates, {
+        fillColor: this.getColorByAvgTemp(0),
+        fillOpacity: 0.4,
+        color: this.getColor(1),
+        weight: 2,
+      }).addTo(this.map);
+
+      polygon.on('mouseover', () => {
+        polygon.setStyle({ fillOpacity: 0.7 });
+        const inside = this.getMarkersInsidePolygon(polygon);
+        const meanTemp = this.calculateMeanTemperature(inside);
+        const count = this.countMarkersInsidePolygon(polygon);
+        this.activeRegion = {
+          name: entry.name || 'Area',
+          temperatureLabel: count === 0 ? `Weather report ${this.weatherReportTemp}Â°C` : `Avg. ${meanTemp.toFixed(2)}Â°C`,
+          count,
+          visible: true,
         };
-  
-        const highlightPolygon = () => {
-          polygon.setStyle({
-            fillOpacity: 0.7
-          });
-        };
-  
-        const resetPolygonStyle = () => {
-          polygon.setStyle({
-            fillOpacity: 0.4
-          });
-        };
-  
-        const updateLegend = (payload: { name: string; temperature: string; count: number }) => {
-          this.activeRegion = {
-            name: payload.name,
-            temperatureLabel: payload.temperature,
-            count: payload.count,
-            visible: true,
-          };
-        };
-  
-        polygon.on('mouseover', (e) => {
-          highlightPolygon();
-          const markersInside = this.getMarkersInsidePolygon(polygon);
-          const meanTemp = this.calculateMeanTemperature(markersInside);
-          const countMarkersInside = this.countMarkersInsidePolygon(polygon);
-  
-          let temperatureLabel = '';
-          if (countMarkersInside === 0) {
-            temperatureLabel = `Weather report ${this.weatherReportTemp}°C`;
-          } else {
-            temperatureLabel = `Avg. ${meanTemp.toFixed(2)}°C`;
-          }
-  
-          updateLegend({
-            name: data.name || "Area",
-            temperature: temperatureLabel,
-            count: countMarkersInside,
-          });
-        });
-  
-        polygon.on('mouseout', (e) => {
-          resetPolygonStyle();
-          this.activeRegion = {
-            name: "",
-            temperatureLabel: "",
-            count: 0,
-            visible: false,
-          };
-        });
-  
-        polygon.on('click', (e) => {
-          const bounds = polygon.getBounds();
-          this.map.fitBounds(bounds);
-        });
-  
-        data.polygonLayer = polygon;
-  
-        updatePolygonStyle();
-      }
-    });
-  
-    setInterval(() => {
-      this.temperatureData.forEach(data => {
-        if (data.polygonLayer) {
-          const markersInside = this.getMarkersInsidePolygon(data.polygonLayer);
-          const meanTemp = this.calculateMeanTemperature(markersInside);
-          const tempDiff = Math.abs(meanTemp - this.weatherReportTemp);
-          data.polygonLayer.setStyle({
-            fillColor: this.getColorByAvgTemp(meanTemp),
-            color: this.getColor(tempDiff)
-          });
-        }
       });
-    }, 5000);
+
+      polygon.on('mouseout', () => {
+        polygon.setStyle({ fillOpacity: 0.4 });
+        this.activeRegion = { name: '', temperatureLabel: '', count: 0, visible: false };
+      });
+
+      polygon.on('click', () => {
+        this.map.fitBounds(polygon.getBounds());
+      });
+
+      entry.polygonLayer = polygon;
+      this.updateSinglePolygonStyle(entry);
+    });
+
+    this.polygonTimerId = window.setInterval(() => {
+      this.temperatureData.forEach((entry) => this.updateSinglePolygonStyle(entry));
+    }, this.simulationIntervalMs);
+  }
+
+  private updateSinglePolygonStyle(entry: TemperatureEntry): void {
+    if (!entry.polygonLayer) return;
+    const markersInside = this.getMarkersInsidePolygon(entry.polygonLayer);
+    const meanTemp = this.calculateMeanTemperature(markersInside);
+    const diff = Math.abs(meanTemp - this.weatherReportTemp);
+    entry.polygonLayer.setStyle({
+      fillColor: this.getColorByAvgTemp(meanTemp),
+      color: this.getColor(diff),
+      fillOpacity: 0.4,
+    });
   }
 
   private getColorByAvgTemp(avgTemp: number): string {
-    return avgTemp < 0    ? '#00008B' :   // Dark blue for < 0°C
-           avgTemp < 6    ? '#1E90FF' :   // Light blue for 0-6°C
-           avgTemp < 11   ? '#00CED1' :   // Turquoise blue for 6-11°C
-           avgTemp < 20   ? '#ADFF2F' :   // Yellow-green for 11-20°C
-           avgTemp < 30   ? '#ADFF2F' :   // Yellow-green for 20-30°C
-           avgTemp < 40   ? '#FFA500' :   // Orange for 30-40°C
-                            '#8B0000';    // Dark red for > 40°C
+    return avgTemp < 0
+      ? '#00008B'
+      : avgTemp < 6
+        ? '#1E90FF'
+        : avgTemp < 11
+          ? '#00CED1'
+          : avgTemp < 20
+            ? '#ADFF2F'
+            : avgTemp < 30
+              ? '#ADFF2F'
+              : avgTemp < 40
+                ? '#FFA500'
+                : '#8B0000';
   }
 
-  private addAvgTemperatureLegend() {
-    const legend = new L.Control({ position: 'bottomright' });
-  
-    legend.onAdd = (map) => {
-      const div = L.DomUtil.create('div', 'info legend');
-      div.innerHTML = `
-        <h6>Temperature (Area)</h6>
-        <i style="background:#00008B"></i> < 0°C<br>
-        <i style="background:#1E90FF"></i> 0-6°C<br>
-        <i style="background:#00CED1"></i> 6-11°C<br>
-        <i style="background:#ADFF2F"></i> 11-20°C<br>
-        <i style="background:#ADFF2F"></i> 20-30°C<br>
-        <i style="background:#FFA500"></i> 30-40°C<br>
-        <i style="background:#8B0000"></i> > 40°C
-      `;
-      return div;
-    };
-  
-    legend.addTo(this.map);
+  public getColor(difference: number): string {
+    return difference > 1.2
+      ? '#ff0000'
+      : difference > 1.0
+        ? '#db1200'
+        : difference > 0.8
+          ? '#6d4900'
+          : difference > 0.6
+            ? '#495b00'
+            : difference > 0.4
+              ? '#246e00'
+              : '#008000';
   }
 
-  private calculateTemperatureDifference(data: any): number {
-    return Math.abs(data.temp - this.weatherReportTemp);
-  }
-
-  private getMarkersInsidePolygon(polygon: L.Polygon): any[] {
-    return this.temperatureData.filter(markerData => {
-      return this.isMarkerInsidePolygon(markerData, polygon) && markerData.activated;
-    });
+  private getMarkersInsidePolygon(polygon: L.Polygon): TemperatureEntry[] {
+    return this.temperatureData.filter((markerData) => this.isMarkerInsidePolygon(markerData, polygon) && markerData.activated);
   }
 
   private countMarkersInsidePolygon(polygon: L.Polygon): number {
-    return this.temperatureData.filter(markerData => {
-      return this.isMarkerInsidePolygon(markerData, polygon) && markerData.activated;
-    }).length;
+    return this.getMarkersInsidePolygon(polygon).length;
   }
 
   private isMarkerInsidePolygon(marker: MarkerData, polygon: L.Polygon): boolean {
-    const x = marker.lat, y = marker.lng;
+    const x = marker.lat;
+    const y = marker.lng;
     let inside = false;
-  
+
     const processVertices = (vertices: L.LatLng[]) => {
       for (let i = 0, j = vertices.length - 1; i < vertices.length; j = i++) {
-        const xi = vertices[i].lat, yi = vertices[i].lng;
-        const xj = vertices[j].lat, yj = vertices[j].lng;
-  
-        const intersect = ((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
-  
+        const xi = vertices[i].lat;
+        const yi = vertices[i].lng;
+        const xj = vertices[j].lat;
+        const yj = vertices[j].lng;
+        const intersect = yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi;
         if (intersect) inside = !inside;
       }
     };
-  
+
     const allVertices = polygon.getLatLngs();
-  
     if (Array.isArray(allVertices)) {
       if (allVertices.length > 0 && Array.isArray(allVertices[0])) {
-        allVertices.forEach(part => {
+        allVertices.forEach((part) => {
           if (Array.isArray(part) && part.length > 0 && part[0] instanceof L.LatLng) {
             processVertices(part as L.LatLng[]);
           }
@@ -410,187 +596,78 @@ export class LeafletMapComponent implements OnInit {
         processVertices(allVertices as L.LatLng[]);
       }
     }
-  
+
     return inside;
   }
-  
-  private calculateMeanTemperature(markers: Array<any>): number {
+
+  private calculateMeanTemperature(markers: TemperatureEntry[]): number {
+    if (markers.length === 0) return 0;
     const total = markers.reduce((acc, marker) => acc + marker.temp, 0);
-    return markers.length > 0 ? total / markers.length : 0;
+    return total / markers.length;
   }
 
-  private calculateOverallAverageTemperature() {
+  private calculateOverallAverageTemperature(): number {
     if (this.temperatureData.length === 0) {
-        return 0;
+      return 0;
     }
     return this.temperatureData.reduce((sum, marker) => sum + marker.temp, 0) / this.temperatureData.length;
   }
 
-  private updateTemperatureLegend(averageTemp: number) {
-    // handled inside the side panel
+  private recalculateStats(): void {
+    this.averageTemperature = this.calculateOverallAverageTemperature();
+    this.activeSensorCount = this.temperatureData.filter((entry) => entry.activated).length;
   }
 
-  private addLegend() {
-    const legend = new L.Control({ position: 'bottomright' });
-  
-    legend.onAdd = (map) => {
-      const div = L.DomUtil.create('div', 'info legend');
-      div.innerHTML = '<h6>Temperature Deviation (Border)</h6>';
-      const tempDiffs = [0.2, 0.4, 0.6, 0.8, 1.0, 1.2];
-      const colors = ['#008000', '#246e00', '#495b00', '#6d4900', '#db1200', '#ff0000'];
-  
-      for (let i = 0; i < tempDiffs.length; i++) {
-        if (i < tempDiffs.length - 1) {
-          div.innerHTML += `<i style="background:${colors[i]}"></i> ${tempDiffs[i]}°C<br>`;
-        } else {
-          div.innerHTML += `<i style="background:${colors[i]}"></i> >${tempDiffs[i]}°C<br>`;
-        }
-      }
-  
-      return div;
-    };
-  
-    legend.addTo(this.map);
-  }
-  
-  private addTemperatureLegend(averageTemp: number) {
-    this.temperatureLegend = new L.Control({ position: 'topright' });
-    this.temperatureLegend.onAdd = (map) => {
-      const div = L.DomUtil.create('div', 'info legend');
-      div.innerHTML = `<h6>⌀ Temperature</h6>${averageTemp.toFixed(2)} °C`;
-      return div;
-    };
-    this.temperatureLegend.addTo(this.map);
-  }
+  private addSensorAtLocation(latlng: L.LatLng): void {
+    const input = prompt('Please enter the temperature value:', '');
+    if (input === null || input.trim() === '' || Number.isNaN(Number(input))) {
+      alert('Please enter a valid temperature value.');
+      return;
+    }
 
-  private addDigitalShadowLegend() {
-    const descriptionLegend = new L.Control({ position: 'bottomleft' });
-
-    descriptionLegend.onAdd = (map) => {
-        const div = L.DomUtil.create('div', 'info legend');
-        div.innerHTML = `
-            <h6>Integrated GeoJSON file from Solid Pod</h6>
-            <div style="padding-left: 20px;">
-                <div>
-                    <span style="display: inline-block; width: 10px; height: 10px; background-color: green; border-radius: 50%; margin-right: 5px;"></span>
-                    hma-wuppertal-quartiere.json
-                </div>
-            </div>
-            <h6 style="margin-top: 10px;">Integrated Data Sources from Solid Pods</h6>
-            <div style="padding-left: 20px;">
-                <div>
-                    <span style="display: inline-block; width: 10px; height: 10px; background-color: green; border-radius: 50%; margin-right: 5px;"></span>
-                    hma-temp-1.csv
-                </div>
-                <div style="margin-top: 5px;">
-                    <span style="display: inline-block; width: 10px; height: 10px; background-color: green; border-radius: 50%; margin-right: 5px;"></span>
-                    hma-temp-2.json
-                </div>
-                <div style="margin-top: 5px;">
-                    <span style="display: inline-block; width: 10px; height: 10px; background-color: green; border-radius: 50%; margin-right: 5px;"></span>
-                    hma-temp-3.csv
-                </div>
-            </div>
-        `;
-        return div;
-    };
-
-    descriptionLegend.addTo(this.map);
-
-    setTimeout(() => {
-        const sensor3Switch = document.getElementById('flexSwitchCheckSensor3') as HTMLInputElement;
-        if (sensor3Switch) {
-            sensor3Switch.addEventListener('change', (event) => {
-                if (sensor3Switch.checked) {
-                    this.addSensor3Marker();
-                } else {
-                    this.removeSensor3Marker();
-                }
-            });
-        }
-    }, 0);
-  }
-
-  private sensor3Marker: L.Marker | null = null;
-
-  private addSensor3Marker(): void {
-      if (!this.sensor3Marker) {
-          this.sensor3Marker = L.marker([51.30034498589104, 7.144262435658878], { 
-              icon: this.createIconStatic('assets/temperature.png') 
-          }).addTo(this.map);
-          this.sensor3Marker.bindPopup(`Temperature: 8°C`).openTooltip();
-      }
-  }
-
-  private removeSensor3Marker(): void {
-      if (this.sensor3Marker) {
-          this.map.removeLayer(this.sensor3Marker);
-          this.sensor3Marker = null;
-      }
-  }
-
-  private addLogoLegend() {
-    const logoLegend = new L.Control({ position: 'topright' });
-
-    logoLegend.onAdd = (map) => {
-        const div = L.DomUtil.create('div', 'info logo-legend');
-        div.innerHTML = `
-            <img src="assets/images/Icon_GesundesTal.png" alt="Gesundes Tal Logo" style="width:50px; height:auto; margin-bottom:8px; margin-right:10px;">
-            <img src="assets/images/KFW.svg" alt="KFW Logo" style="width:50px; height:auto; margin-right:10px;">
-            <img src="assets/images/BMWSB.png" alt="BMWSB Logo" style="width:150px; height:auto; margin-bottom:8px; ">
-        `;
-        return div;
-    };
-
-    logoLegend.addTo(this.map);
-}
-
-  private createMarkers() {
-    this.markers = [];
-    this.temperatureData.forEach((data) => {
-      const iconPath = data.activated ? 'assets/stationary_sensor.png' : 'assets/stationary_sensor_disabled.png';
-      const icon = this.createIconStatic(iconPath);
-
-      const marker = L.marker([data.lat, data.lng], { icon: icon })
-          .bindPopup(`Temperature: ${data.temp}°C`);
-
-      marker.on('contextmenu', () => {
-        const markerData = this.temperatureData.find(md => md.lat === data.lat && md.lng === data.lng);
-        if (markerData) {
-          markerData.activated = !markerData.activated;
-
-          const newIconPath = markerData.activated ? 'assets/stationary_sensor.png' : 'assets/stationary_sensor_disabled.png';
-          const newIcon = this.createIconStatic(newIconPath);
-          marker.setIcon(newIcon);
-        }
-      });
-
-      marker.addTo(this.map);
-      this.markers.push(marker);
+    this.temperatureData.push({
+      lat: latlng.lat,
+      lng: latlng.lng,
+      temp: Number(input),
+      activated: true,
     });
+    this.rebuildMarkers();
+    this.recalculateStats();
   }
 
-  private createIconStatic(path: string): L.Icon {
-    return L.icon({
-      iconUrl: path,
-      iconSize: [25, 26],
-      iconAnchor: [5, 30],
-      popupAnchor: [7, -30]
-    });
+  private loadRequestStateFromStorage(): void {
+    if (typeof window === 'undefined') {
+      this.requestStateBySourceKey = {};
+      return;
+    }
+    try {
+      const raw = window.localStorage.getItem(REQUEST_STATE_KEY);
+      this.requestStateBySourceKey = raw ? (JSON.parse(raw) as Record<string, StoredRequestState>) : {};
+    } catch {
+      this.requestStateBySourceKey = {};
+    }
   }
 
-  public getColor(difference: number): string {
-    return difference > 1.2 ? '#ff0000' :
-           difference > 1.0 ? '#db1200' :
-           difference > 0.8 ? '#6d4900' :
-           difference > 0.6 ? '#495b00' :
-           difference > 0.4 ? '#246e00' :
-           '#008000';
+  private persistRequestState(): void {
+    if (typeof window === 'undefined') return;
+    window.localStorage.setItem(REQUEST_STATE_KEY, JSON.stringify(this.requestStateBySourceKey));
   }
 
-  onResize() {
-    if (this.map) {
-      this.map.invalidateSize();
+  private toErrorMessage(err: unknown, fallback: string): string {
+    if (err instanceof Error && err.message) {
+      return err.message;
+    }
+    return fallback;
+  }
+
+  private async restoreAuthSession(): Promise<void> {
+    try {
+      await this.authService.init();
+      this.isLoggedIn = this.authService.isLoggedIn();
+      this.currentWebId = this.authService.webId();
+      this.requesterWebId = this.currentWebId || this.dataspaceSourceService.getRequesterWebId();
+    } catch (err) {
+      this.requestError = this.toErrorMessage(err, 'Solid session restore failed.');
     }
   }
 }
