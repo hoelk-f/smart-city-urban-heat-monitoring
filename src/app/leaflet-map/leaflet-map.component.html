@@ -1,4 +1,4 @@
-﻿<div class="map-shell">
+<div class="map-shell">
   <div id="map"></div>
 
   <button class="panel-toggle" (click)="togglePanel()" aria-label="Toggle info panel">
@@ -21,25 +21,10 @@
         <div class="panel-subtitle">Live overview & data sources</div>
       </div>
       <div class="panel-header-actions">
-        <button class="auth-btn" *ngIf="!isLoggedIn" (click)="login()">Sign in</button>
-        <button class="auth-btn" *ngIf="isLoggedIn" (click)="logout()">Sign out</button>
         <button class="panel-close" (click)="togglePanel()" aria-label="Close panel">
           <i class="fa-solid fa-xmark"></i>
         </button>
       </div>
-    </div>
-
-    <div class="panel-section">
-      <div class="section-title">Solid Auth</div>
-      <div class="source-footnote">Status: {{ isLoggedIn ? 'signed in' : 'not signed in' }}</div>
-      <div class="source-footnote" *ngIf="currentWebId">
-        WebID: <a [href]="currentWebId" target="_blank" rel="noopener">{{ currentWebId }}</a>
-      </div>
-    </div>
-
-    <div class="panel-section" *ngIf="pollingError">
-      <div class="section-title">Decision Polling</div>
-      <div class="error-text">{{ pollingError }}</div>
     </div>
 
     <div class="panel-section">
@@ -61,7 +46,7 @@
     </div>
 
     <div class="panel-section">
-      <div class="section-title">Integrated temp.json Sources</div>
+      <div class="section-title">Integrated Public temp.json Sources</div>
       <button class="action-btn" (click)="openSourceModal()">
         <i class="fa-solid fa-plus"></i>
         Add data source
@@ -79,12 +64,9 @@
         </div>
       </div>
       <ng-template #noSourcesIntegrated>
-        <div class="source-footnote">No additional data source integrated yet.</div>
+        <div class="source-footnote">No additional public data source integrated yet.</div>
       </ng-template>
 
-      <div class="source-footnote" *ngIf="requesterWebId">
-        Requester WebID: <a [href]="requesterWebId" target="_blank" rel="noopener">{{ requesterWebId }}</a>
-      </div>
       <div class="error-text" *ngIf="requestError">{{ requestError }}</div>
     </div>
 
@@ -137,8 +119,10 @@
   <div class="source-modal" *ngIf="sourceModalOpen">
     <div class="source-modal-header">
       <div>
-        <h3>Integrate temp.json data sources</h3>
-        <p>Discovered via indexed registries and semantic catalogs.</p>
+        <h3>Integrate public temp.json data sources</h3>
+        <p>
+          Considered registries: stadt wuppertal, timberconnect, dace.
+        </p>
       </div>
       <button class="panel-close" (click)="closeSourceModal()" aria-label="Close">
         <i class="fa-solid fa-xmark"></i>
@@ -160,29 +144,8 @@
             {{ isSourceIntegrated(source.key) ? 'Integrated' : 'Integrate' }}
           </button>
         </div>
-      </div>
-
-      <div class="source-column" *ngIf="!sourceLoading">
-        <h4>Restricted</h4>
-        <div class="source-entry" *ngFor="let source of restrictedSources" [class.source-entry-disabled]="isRestrictedDisabled(source)">
-          <div class="source-entry-content">
-            <div class="source-entry-title">{{ source.title }}</div>
-            <div class="source-entry-meta">{{ source.accessUrl }}</div>
-            <div class="status-row">Status: <strong>{{ getRestrictedState(source) }}</strong></div>
-          </div>
-
-          <button
-            class="source-action"
-            [disabled]="isSourceIntegrated(source.key)"
-            (click)="integrateRestrictedSource(source)"
-          >
-            {{ isSourceIntegrated(source.key)
-              ? 'Integrated'
-              : 'Integrate' }}
-          </button>
-        </div>
-        <div class="source-footnote" *ngIf="restrictedSources.length === 0">
-          No restricted source with active access found.
+        <div class="source-footnote" *ngIf="publicSources.length === 0">
+          No public temp.json source found.
         </div>
       </div>
     </div>

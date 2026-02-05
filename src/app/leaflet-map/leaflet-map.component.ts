@@ -4,13 +4,7 @@ import { CommonModule } from '@angular/common';
 import { HttpClient } from '@angular/common/http';
 import { MarkerData } from '../interface/MarkerData';
 import { SensorDataService } from '../sensor-data.service';
-import {
-  AccessDecisionItem,
-  DataspaceSourceService,
-  DecisionState,
-  TempJsonSource,
-} from '../dataspace-source.service';
-import { SolidAuthService } from '../solid-auth.service';
+import { DataspaceSourceService, TempJsonSource } from '../dataspace-source.service';
 
 interface TemperatureEntry {
   temp: number;
@@ -28,16 +22,7 @@ interface IntegratedSource {
   key: string;
   title: string;
   accessUrl: string;
-  isPublic: boolean;
 }
-
-interface StoredRequestState {
-  state: DecisionState;
-  updatedAt: string;
-  expiresAt?: string;
-}
-
-const REQUEST_STATE_KEY = 'uhm.request.state.v1';
 
 @Component({
   selector: 'app-leaflet-map',
@@ -50,13 +35,11 @@ export class LeafletMapComponent implements OnInit, OnDestroy {
   private map!: L.Map;
   private markers: L.Marker[] = [];
   private readonly simulationIntervalMs = 10000;
-  private readonly decisionPollingIntervalMs = 10000;
   private readonly simulationDelta = 0.4;
   private readonly minSimulatedTemp = -10;
   private readonly maxSimulatedTemp = 50;
   private simulationTimerId?: number;
   private polygonTimerId?: number;
-  private decisionTimerId?: number;
 
   public weatherReportTemp = 6.8;
   public temperatureData: TemperatureEntry[] = [];
@@ -67,10 +50,6 @@ export class LeafletMapComponent implements OnInit, OnDestroy {
   public sourceLoading = false;
   public sourceError = '';
   public requestError = '';
-  public pollingError = '';
-  public requesterWebId = "";
-  public isLoggedIn = false;
-  public currentWebId = '';
   public activeRegion = {
     name: '',
     temperatureLabel: '',
@@ -79,10 +58,7 @@ export class LeafletMapComponent implements OnInit, OnDestroy {
   };
 
   public publicSources: TempJsonSource[] = [];
-  public restrictedSources: TempJsonSource[] = [];
   public integratedSources: IntegratedSource[] = [];
-  public decisionBySourceKey = new Map<string, AccessDecisionItem>();
-  public requestStateBySourceKey: Record<string, StoredRequestState> = {};
 
   public dataSources = {
     geojson:
@@ -116,13 +92,10 @@ export class LeafletMapComponent implements OnInit, OnDestroy {
   constructor(
     private http: HttpClient,
     private sensorDataService: SensorDataService,
-    private dataspaceSourceService: DataspaceSourceService,
-    private authService: SolidAuthService
+    private dataspaceSourceService: DataspaceSourceService
   ) {}
 
   ngOnInit(): void {
-    this.loadRequestStateFromStorage();
-
     if (typeof window === 'undefined') {
       return;
     }
@@ -138,17 +111,14 @@ export class LeafletMapComponent implements OnInit, OnDestroy {
       this.addSensorAtLocation(e.latlng);
     });
 
-    this.initializeTemperatureData();
+    void this.initializeTemperatureData();
     this.fetchWeatherReportTemperature();
     this.startSimulationLoop();
-    this.startDecisionPolling();
-    void this.restoreAuthSession();
   }
 
   ngOnDestroy(): void {
     if (this.simulationTimerId) window.clearInterval(this.simulationTimerId);
     if (this.polygonTimerId) window.clearInterval(this.polygonTimerId);
-    if (this.decisionTimerId) window.clearInterval(this.decisionTimerId);
   }
 
   togglePanel(): void {
@@ -159,15 +129,6 @@ export class LeafletMapComponent implements OnInit, OnDestroy {
     this.sourceModalOpen = true;
     this.requestError = '';
     this.sourceError = '';
-    this.requesterWebId = this.authService.webId();
-
-    if (!this.isLoggedIn || !this.requesterWebId) {
-      this.publicSources = [];
-      this.restrictedSources = [];
-      this.sourceError = 'Please sign in with your Solid account first.';
-      return;
-    }
-
     void this.loadDiscoverableSources();
   }
 
@@ -178,79 +139,20 @@ export class LeafletMapComponent implements OnInit, OnDestroy {
   }
 
   async loadDiscoverableSources(): Promise<void> {
-    if (!this.isLoggedIn || !this.authService.webId()) {
-      this.sourceError = 'Please sign in with your Solid account first.';
-      this.publicSources = [];
-      this.restrictedSources = [];
-      return;
-    }
-
     this.sourceLoading = true;
     this.sourceError = '';
     try {
       const discovered = await this.dataspaceSourceService.discoverTempJsonSources();
-      const decisions = await this.dataspaceSourceService.loadDecisionStateBySourceKey();
-      this.decisionBySourceKey = decisions;
-
-      this.publicSources = discovered.filter((item) => item.isPublic);
-      this.restrictedSources = discovered.filter(
-        (item) => !item.isPublic && decisions.get(item.key)?.state === 'approved'
-      );
+      this.publicSources = discovered;
     } catch (err) {
-      this.sourceError = this.toErrorMessage(err, 'Could not load discoverable data sources.');
+      this.sourceError = this.toErrorMessage(err, 'Could not load discoverable public data sources.');
     } finally {
       this.sourceLoading = false;
     }
   }
 
   async integratePublicSource(source: TempJsonSource): Promise<void> {
-    await this.integrateSource(source, true);
-  }
-
-  async requestRestrictedSource(source: TempJsonSource): Promise<void> {
-    if (!this.isLoggedIn) {
-      this.requestError = 'Please sign in first to request restricted sources.';
-      return;
-    }
-
-    if (this.isSourceIntegrated(source.key)) {
-      this.requestError = 'Source is already integrated.';
-      return;
-    }
-
-    const currentState = this.getRestrictedState(source);
-    if (currentState === 'denied' || currentState === 'revoked' || currentState === 'expired') {
-      this.requestError = 'Access for this source was denied or is no longer valid.';
-      return;
-    }
-
-    if (currentState === 'pending') {
-      return;
-    }
-
-    if (currentState === 'approved') {
-      await this.integrateSource(source, false);
-      return;
-    }
-
-    this.requestError = '';
-    try {
-      await this.dataspaceSourceService.requestRestrictedAccess(
-        source,
-        'Temperature monitoring integration request from Smart City Urban Heat Monitoring.'
-      );
-      this.requestStateBySourceKey[source.key] = {
-        state: 'pending',
-        updatedAt: new Date().toISOString(),
-      };
-      this.persistRequestState();
-    } catch (err) {
-      this.requestError = this.toErrorMessage(err, 'Access request could not be sent.');
-    }
-  }
-
-  async integrateRestrictedSource(source: TempJsonSource): Promise<void> {
-    await this.integrateSource(source, false);
+    await this.integrateSource(source);
   }
 
   removeIntegratedSource(sourceKey: string): void {
@@ -260,42 +162,15 @@ export class LeafletMapComponent implements OnInit, OnDestroy {
     this.recalculateStats();
   }
 
-  getRestrictedState(source: TempJsonSource): DecisionState {
-    const fromDecision = this.decisionBySourceKey.get(source.key);
-    if (fromDecision) {
-      return fromDecision.state;
-    }
-    const fromRequest = this.requestStateBySourceKey[source.key];
-    return fromRequest?.state || 'none';
-  }
-
-  isRestrictedDisabled(source: TempJsonSource): boolean {
-    const state = this.getRestrictedState(source);
-    return state === 'denied' || state === 'revoked' || state === 'expired';
-  }
-
   isSourceIntegrated(sourceKey: string): boolean {
     return this.integratedSources.some((source) => source.key === sourceKey);
   }
 
-  private async integrateSource(source: TempJsonSource, allowPublicOnly: boolean): Promise<void> {
+  private async integrateSource(source: TempJsonSource): Promise<void> {
     this.requestError = '';
 
     if (this.isSourceIntegrated(source.key)) {
       this.requestError = 'Source is already integrated.';
-      return;
-    }
-
-    if (!source.isPublic && !allowPublicOnly) {
-      const state = this.getRestrictedState(source);
-      if (state !== 'approved') {
-        this.requestError = 'Restricted source can only be integrated after approval.';
-        return;
-      }
-    }
-
-    if (!source.isPublic && allowPublicOnly) {
-      this.requestError = 'Restricted source must be requested first.';
       return;
     }
 
@@ -313,7 +188,6 @@ export class LeafletMapComponent implements OnInit, OnDestroy {
         key: source.key,
         title: source.title,
         accessUrl: source.accessUrl,
-        isPublic: source.isPublic,
       });
       this.rebuildMarkers();
       this.recalculateStats();
@@ -335,7 +209,6 @@ export class LeafletMapComponent implements OnInit, OnDestroy {
         }
       },
       error: (error) => {
-        // Keep the default fallback if CSV is unavailable.
         console.error('Error loading weather report CSV:', error);
       },
     });
@@ -385,65 +258,6 @@ export class LeafletMapComponent implements OnInit, OnDestroy {
       this.updateMarkerPopupsAndIcons();
       this.recalculateStats();
     }, this.simulationIntervalMs);
-  }
-
-  private startDecisionPolling(): void {
-    const poll = async () => {
-      try {
-        this.pollingError = '';
-        const decisions = await this.dataspaceSourceService.loadDecisionStateBySourceKey();
-        this.decisionBySourceKey = decisions;
-        decisions.forEach((decision, key) => {
-          this.requestStateBySourceKey[key] = {
-            state: decision.state,
-            updatedAt: decision.decidedAt || new Date().toISOString(),
-            expiresAt: decision.expiresAt || '',
-          };
-        });
-        this.persistRequestState();
-
-        const revokedKeys = new Set<string>();
-        this.integratedSources.forEach((source) => {
-          if (source.isPublic) return;
-          const state = this.getRestrictedState({ ...source, identifier: source.key, ownerWebId: '', key: source.key });
-          if (state === 'denied' || state === 'revoked' || state === 'expired') {
-            revokedKeys.add(source.key);
-          }
-        });
-        if (revokedKeys.size > 0) {
-          this.temperatureData = this.temperatureData.filter((entry) => !entry.sourceKey || !revokedKeys.has(entry.sourceKey));
-          this.integratedSources = this.integratedSources.filter((source) => !revokedKeys.has(source.key));
-          this.rebuildMarkers();
-          this.recalculateStats();
-        }
-      } catch (err) {
-        this.pollingError = this.toErrorMessage(err, 'Decision polling failed. Retrying automatically.');
-      }
-    };
-
-    void poll();
-    this.decisionTimerId = window.setInterval(() => {
-      void poll();
-    }, this.decisionPollingIntervalMs);
-  }
-
-  async login(): Promise<void> {
-    this.requestError = '';
-    try {
-      await this.authService.login();
-    } catch (err) {
-      this.requestError = this.toErrorMessage(
-        err,
-        'Solid login could not be started. Please try again.'
-      );
-    }
-  }
-
-  async logout(): Promise<void> {
-    await this.authService.logout();
-    this.isLoggedIn = false;
-    this.currentWebId = '';
-    this.requesterWebId = "";
   }
 
   private simulateSensorVariation(): void {
@@ -664,39 +478,10 @@ export class LeafletMapComponent implements OnInit, OnDestroy {
     this.recalculateStats();
   }
 
-  private loadRequestStateFromStorage(): void {
-    if (typeof window === 'undefined') {
-      this.requestStateBySourceKey = {};
-      return;
-    }
-    try {
-      const raw = window.localStorage.getItem(REQUEST_STATE_KEY);
-      this.requestStateBySourceKey = raw ? (JSON.parse(raw) as Record<string, StoredRequestState>) : {};
-    } catch {
-      this.requestStateBySourceKey = {};
-    }
-  }
-
-  private persistRequestState(): void {
-    if (typeof window === 'undefined') return;
-    window.localStorage.setItem(REQUEST_STATE_KEY, JSON.stringify(this.requestStateBySourceKey));
-  }
-
   private toErrorMessage(err: unknown, fallback: string): string {
     if (err instanceof Error && err.message) {
       return err.message;
     }
     return fallback;
-  }
-
-  private async restoreAuthSession(): Promise<void> {
-    try {
-      await this.authService.init();
-      this.isLoggedIn = this.authService.isLoggedIn();
-      this.currentWebId = this.authService.webId();
-      this.requesterWebId = this.currentWebId || "";
-    } catch (err) {
-      this.requestError = this.toErrorMessage(err, 'Solid session restore failed.');
-    }
   }
 }
