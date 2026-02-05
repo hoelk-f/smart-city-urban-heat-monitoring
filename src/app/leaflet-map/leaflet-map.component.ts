@@ -429,7 +429,14 @@ export class LeafletMapComponent implements OnInit, OnDestroy {
 
   async login(): Promise<void> {
     this.requestError = '';
-    await this.authService.login();
+    try {
+      await this.authService.login();
+    } catch (err) {
+      this.requestError = this.toErrorMessage(
+        err,
+        'Solid login could not be started. Please try again.'
+      );
+    }
   }
 
   async logout(): Promise<void> {

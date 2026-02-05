@@ -3,6 +3,11 @@ import { Session } from '@inrupt/solid-client-authn-browser';
 
 @Injectable({ providedIn: 'root' })
 export class SolidAuthService {
+  private readonly issuerStorageKey = 'uhm.oidc.issuer';
+  private readonly defaultIssuers = [
+    'https://tmdt-solid-community-server.de',
+    'https://solidcommunity.net',
+  ];
   private readonly session = new Session();
 
   async init(): Promise<void> {
@@ -15,11 +20,30 @@ export class SolidAuthService {
 
   async login(): Promise<void> {
     if (typeof window === 'undefined') return;
-    await this.session.login({
-      oidcIssuer: 'https://solidcommunity.net',
-      redirectUrl: window.location.href,
-      clientName: 'Smart City Urban Heat Monitoring',
-    });
+    const savedIssuer = window.localStorage.getItem(this.issuerStorageKey) || '';
+    const issuers = [savedIssuer, ...this.defaultIssuers].filter(
+      (value, index, array) => Boolean(value) && array.indexOf(value) === index
+    );
+    const redirectUrl = `${window.location.origin}${window.location.pathname}`;
+
+    let lastError: unknown = null;
+    for (const issuer of issuers) {
+      try {
+        window.localStorage.setItem(this.issuerStorageKey, issuer);
+        await this.session.login({
+          oidcIssuer: issuer,
+          redirectUrl,
+          clientName: 'Smart City Urban Heat Monitoring',
+        });
+        return;
+      } catch (error) {
+        lastError = error;
+      }
+    }
+
+    throw lastError instanceof Error
+      ? lastError
+      : new Error('Solid login could not be started. Please verify your OIDC issuer.');
   }
 
   async logout(): Promise<void> {
