@@ -11,6 +11,10 @@ import {
 import { DCAT, DCTERMS, FOAF, RDF } from '@inrupt/vocab-common-rdf';
 
 const REGISTRY_CONTAINERS = [
+  'https://tmdt-solid-community-server.de/semanticdatacatalog/public/stadt-wuppertal',
+  'https://tmdt-solid-community-server.de/semanticdatacatalog/public/timberconnect',
+  'https://tmdt-solid-community-server.de/semanticdatacatalog/public/dace',
+  // Fallback aliases matching manually typed registry names.
   'https://tmdt-solid-community-server.de/semanticdatacatalog/stadt wuppertal/',
   'https://tmdt-solid-community-server.de/semanticdatacatalog/timberconnect/',
   'https://tmdt-solid-community-server.de/semanticdatacatalog/dace/',
@@ -124,11 +128,19 @@ export class DataspaceSourceService {
   }
 
   private async resolveCatalogUrl(webId: string): Promise<string> {
+    if (!webId) return '';
     try {
       const profileDoc = webId.split('#')[0];
       const dataset = await getSolidDataset(profileDoc, { fetch: this.noCacheFetch });
       const thing = getThing(dataset, webId) || getThingAll(dataset)[0];
-      return thing ? getUrl(thing, DCAT.catalog) || '' : '';
+      const profileCatalog = thing ? getUrl(thing, DCAT.catalog) || '' : '';
+      if (profileCatalog) return profileCatalog;
+    } catch {
+      // Fallback to default catalog location below.
+    }
+
+    try {
+      return this.getCatalogResourceUrl(webId);
     } catch {
       return '';
     }
@@ -239,5 +251,18 @@ export class DataspaceSourceService {
     } catch {
       return sanitized.endsWith('/') ? sanitized : `${sanitized}/`;
     }
+  }
+
+  private getPodRoot(webId: string): string {
+    const parsed = new URL(webId);
+    const segments = parsed.pathname.split('/').filter(Boolean);
+    const profileIndex = segments.indexOf('profile');
+    const baseSegments = profileIndex > -1 ? segments.slice(0, profileIndex) : segments;
+    const basePath = baseSegments.length ? `/${baseSegments.join('/')}/` : '/';
+    return `${parsed.origin}${basePath}`;
+  }
+
+  private getCatalogResourceUrl(webId: string): string {
+    return `${this.getPodRoot(webId)}catalog/cat.ttl#it`;
   }
 }
