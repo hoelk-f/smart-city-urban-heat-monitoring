@@ -1,4 +1,4 @@
-<div class="map-shell">
+﻿<div class="map-shell">
   <div id="map"></div>
 
   <button class="panel-toggle" (click)="togglePanel()" aria-label="Toggle info panel">
@@ -9,7 +9,7 @@
     <div class="hover-info-name">{{ activeRegion.name }}</div>
     <div class="hover-info-meta">
       <span>{{ activeRegion.temperatureLabel }}</span>
-      <span>•</span>
+      <span>&bull;</span>
       <span>{{ activeRegion.count }} sensors</span>
     </div>
   </div>
@@ -36,7 +36,7 @@
         WebID: <a [href]="currentWebId" target="_blank" rel="noopener">{{ currentWebId }}</a>
       </div>
       <div class="source-footnote" *ngIf="!isLoggedIn">
-        Test account: <code>heatmonitoringapp@uni-wuppertal.de</code>
+        Test account: <code>heatmonitoringapp&#64;uni-wuppertal.de</code>
       </div>
     </div>
 
@@ -50,11 +50,11 @@
       <div class="stat-grid">
         <div class="stat-card">
           <span>Average temperature</span>
-          <strong>{{ averageTemperature.toFixed(2) }} °C</strong>
+          <strong>{{ averageTemperature.toFixed(2) }} &deg;C</strong>
         </div>
         <div class="stat-card">
           <span>Weather report</span>
-          <strong>{{ weatherReportTemp.toFixed(2) }} °C</strong>
+          <strong>{{ weatherReportTemp.toFixed(2) }} &deg;C</strong>
         </div>
         <div class="stat-card">
           <span>Active sensors</span>
@@ -100,13 +100,7 @@
       <div class="source-block">
         <div class="source-title">Sensor feeds</div>
         <div class="source-list">
-          <a
-            class="source-item"
-            *ngFor="let source of dataSources.sensors"
-            [href]="source"
-            target="_blank"
-            rel="noopener"
-          >
+          <a class="source-item" *ngFor="let source of dataSources.sensors" [href]="source" target="_blank" rel="noopener">
             {{ source }}
           </a>
         </div>
@@ -165,11 +159,7 @@
             <div class="source-entry-title">{{ source.title }}</div>
             <div class="source-entry-meta">{{ source.accessUrl }}</div>
           </div>
-          <button
-            class="source-action"
-            [disabled]="isSourceIntegrated(source.key)"
-            (click)="integratePublicSource(source)"
-          >
+          <button class="source-action" [disabled]="isSourceIntegrated(source.key)" (click)="integratePublicSource(source)">
             {{ isSourceIntegrated(source.key) ? 'Integrated' : 'Integrate' }}
           </button>
         </div>
@@ -177,31 +167,17 @@
 
       <div class="source-column" *ngIf="!sourceLoading">
         <h4>Restricted</h4>
-        <div
-          class="source-entry"
-          *ngFor="let source of restrictedSources"
-          [class.source-entry-disabled]="isRestrictedDisabled(source)"
-        >
+        <div class="source-entry" *ngFor="let source of restrictedSources" [class.source-entry-disabled]="isRestrictedDisabled(source)">
           <div class="source-entry-content">
             <div class="source-entry-title">{{ source.title }}</div>
             <div class="source-entry-meta">{{ source.accessUrl }}</div>
-            <div class="status-row">
-              Status: <strong>{{ getRestrictedState(source) }}</strong>
-            </div>
+            <div class="status-row">Status: <strong>{{ getRestrictedState(source) }}</strong></div>
           </div>
 
           <button
             class="source-action"
-            [disabled]="
-              isSourceIntegrated(source.key) ||
-              isRestrictedDisabled(source) ||
-              getRestrictedState(source) === 'pending'
-            "
-            (click)="
-              getRestrictedState(source) === 'approved'
-                ? integrateRestrictedSource(source)
-                : requestRestrictedSource(source)
-            "
+            [disabled]="isSourceIntegrated(source.key) || isRestrictedDisabled(source) || getRestrictedState(source) === 'pending'"
+            (click)="getRestrictedState(source) === 'approved' ? integrateRestrictedSource(source) : requestRestrictedSource(source)"
           >
             {{ isSourceIntegrated(source.key)
               ? 'Integrated'

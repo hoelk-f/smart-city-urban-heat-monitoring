@@ -1,3 +1,5 @@
+@import "~@fortawesome/fontawesome-free/css/all.min.css";
+
 html, body {
     height: 100%;
     margin: 0;
@@ -33,4 +35,3 @@ html, body {
     margin-right: 8px;
     opacity: 0.7;
 }
-@import "~@fortawesome/fontawesome-free/css/all.min.css";

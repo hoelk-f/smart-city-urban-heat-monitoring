@@ -1,35 +1,14 @@
 import { Injectable } from '@angular/core';
 import { Session } from '@inrupt/solid-client-authn-browser';
 
-const sessionStorageWrapper = {
-  get: async (key: string): Promise<string | undefined> =>
-    typeof window === 'undefined'
-      ? undefined
-      : window.sessionStorage.getItem(key) ?? undefined,
-  set: async (key: string, value: string): Promise<void> => {
-    if (typeof window !== 'undefined') {
-      window.sessionStorage.setItem(key, value);
-    }
-  },
-  delete: async (key: string): Promise<void> => {
-    if (typeof window !== 'undefined') {
-      window.sessionStorage.removeItem(key);
-    }
-  },
-};
-
 @Injectable({ providedIn: 'root' })
 export class SolidAuthService {
-  private readonly session = new Session({
-    clientName: 'Smart City Urban Heat Monitoring',
-    sessionId: 'smart-city-urban-heat-monitoring',
-    secureStorage: sessionStorageWrapper,
-    insecureStorage: sessionStorageWrapper,
-  });
+  private readonly session = new Session();
 
   async init(): Promise<void> {
     if (typeof window === 'undefined') return;
-    await this.session.handleIncomingRedirect(window.location.href, {
+    await this.session.handleIncomingRedirect({
+      url: window.location.href,
       restorePreviousSession: true,
     });
   }

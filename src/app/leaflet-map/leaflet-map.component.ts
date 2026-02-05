@@ -17,7 +17,7 @@ interface TemperatureEntry {
   lat: number;
   lng: number;
   activated: boolean;
-  coordinates?: number[][][];
+  coordinates?: L.LatLngExpression[][][];
   name?: string;
   polygonLayer?: L.Polygon;
   sourceKey?: string;
@@ -95,22 +95,22 @@ export class LeafletMapComponent implements OnInit, OnDestroy {
   };
 
   public deviationLegend = [
-    { label: '0.2Â°C', color: '#008000' },
-    { label: '0.4Â°C', color: '#246e00' },
-    { label: '0.6Â°C', color: '#495b00' },
-    { label: '0.8Â°C', color: '#6d4900' },
-    { label: '1.0Â°C', color: '#db1200' },
-    { label: '> 1.2Â°C', color: '#ff0000' },
+    { label: '0.2°C', color: '#008000' },
+    { label: '0.4°C', color: '#246e00' },
+    { label: '0.6°C', color: '#495b00' },
+    { label: '0.8°C', color: '#6d4900' },
+    { label: '1.0°C', color: '#db1200' },
+    { label: '> 1.2°C', color: '#ff0000' },
   ];
 
   public areaLegend = [
-    { label: '< 0Â°C', color: '#00008B' },
-    { label: '0-6Â°C', color: '#1E90FF' },
-    { label: '6-11Â°C', color: '#00CED1' },
-    { label: '11-20Â°C', color: '#ADFF2F' },
-    { label: '20-30Â°C', color: '#ADFF2F' },
-    { label: '30-40Â°C', color: '#FFA500' },
-    { label: '> 40Â°C', color: '#8B0000' },
+    { label: '< 0°C', color: '#00008B' },
+    { label: '0-6°C', color: '#1E90FF' },
+    { label: '6-11°C', color: '#00CED1' },
+    { label: '11-20°C', color: '#ADFF2F' },
+    { label: '20-30°C', color: '#ADFF2F' },
+    { label: '30-40°C', color: '#FFA500' },
+    { label: '> 40°C', color: '#8B0000' },
   ];
 
   constructor(
@@ -130,7 +130,7 @@ export class LeafletMapComponent implements OnInit, OnDestroy {
     this.map = L.map('map').setView([51.2562, 7.1508], 12);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19,
-      attribution: 'Ã‚© OpenStreetMap contributors',
+      attribution: '© OpenStreetMap contributors',
     }).addTo(this.map);
 
     this.map.on('contextmenu', (e: L.LeafletMouseEvent) => {
@@ -462,9 +462,9 @@ export class LeafletMapComponent implements OnInit, OnDestroy {
 
   private buildPopupContent(entry: TemperatureEntry): string {
     if (entry.sourceTitle) {
-      return `${entry.sourceTitle}<br/>Temperature: ${entry.temp.toFixed(2)}Â°C`;
+      return `${entry.sourceTitle}<br/>Temperature: ${entry.temp.toFixed(2)}°C`;
     }
-    return `Temperature: ${entry.temp.toFixed(2)}Â°C`;
+    return `Temperature: ${entry.temp.toFixed(2)}°C`;
   }
 
   private createIconStatic(path: string): L.Icon {
@@ -480,7 +480,7 @@ export class LeafletMapComponent implements OnInit, OnDestroy {
     this.temperatureData.forEach((entry) => {
       if (!entry.coordinates) return;
 
-      const polygon = L.polygon(entry.coordinates, {
+      const polygon = L.polygon(entry.coordinates as L.LatLngExpression[][][], {
         fillColor: this.getColorByAvgTemp(0),
         fillOpacity: 0.4,
         color: this.getColor(1),
@@ -494,7 +494,7 @@ export class LeafletMapComponent implements OnInit, OnDestroy {
         const count = this.countMarkersInsidePolygon(polygon);
         this.activeRegion = {
           name: entry.name || 'Area',
-          temperatureLabel: count === 0 ? `Weather report ${this.weatherReportTemp}Â°C` : `Avg. ${meanTemp.toFixed(2)}Â°C`,
+          temperatureLabel: count === 0 ? `Weather report ${this.weatherReportTemp}°C` : `Avg. ${meanTemp.toFixed(2)}°C`,
           count,
           visible: true,
         };
