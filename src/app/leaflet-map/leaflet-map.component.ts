@@ -58,8 +58,9 @@ export class LeafletMapComponent implements OnInit, OnDestroy {
   };
 
   public publicSources: TempJsonSource[] = [];
-  public allPublicSources: TempJsonSource[] = [];
+  public restrictedSources: TempJsonSource[] = [];
   public integratedSources: IntegratedSource[] = [];
+  public requestedRestrictedSourceKeys = new Set<string>();
 
   public dataSources = {
     geojson:
@@ -143,9 +144,9 @@ export class LeafletMapComponent implements OnInit, OnDestroy {
     this.sourceLoading = true;
     this.sourceError = '';
     try {
-      const allPublic = await this.dataspaceSourceService.discoverPublicSources();
-      this.allPublicSources = allPublic;
-      this.publicSources = allPublic.filter((source) => /temp/i.test(source.title || ''));
+      const discovered = await this.dataspaceSourceService.discoverTempJsonSources();
+      this.publicSources = discovered.filter((source) => source.isPublic);
+      this.restrictedSources = discovered.filter((source) => !source.isPublic);
     } catch (err) {
       this.sourceError = this.toErrorMessage(err, 'Could not load discoverable public data sources.');
     } finally {
@@ -157,6 +158,14 @@ export class LeafletMapComponent implements OnInit, OnDestroy {
     await this.integrateSource(source);
   }
 
+  requestRestrictedSource(source: TempJsonSource): void {
+    if (this.requestedRestrictedSourceKeys.has(source.key)) {
+      return;
+    }
+    this.requestedRestrictedSourceKeys.add(source.key);
+    this.requestError = `Access request for "${source.title}" was created (demo only).`;
+  }
+
   removeIntegratedSource(sourceKey: string): void {
     this.integratedSources = this.integratedSources.filter((source) => source.key !== sourceKey);
     this.temperatureData = this.temperatureData.filter((entry) => entry.sourceKey !== sourceKey);
@@ -166,6 +175,10 @@ export class LeafletMapComponent implements OnInit, OnDestroy {
 
   isSourceIntegrated(sourceKey: string): boolean {
     return this.integratedSources.some((source) => source.key === sourceKey);
+  }
+
+  isRestrictedRequested(sourceKey: string): boolean {
+    return this.requestedRestrictedSourceKeys.has(sourceKey);
   }
 
   private async integrateSource(source: TempJsonSource): Promise<void> {

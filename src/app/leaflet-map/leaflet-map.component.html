@@ -119,10 +119,7 @@
   <div class="source-modal" *ngIf="sourceModalOpen">
     <div class="source-modal-header">
       <div>
-        <h3>Integrate public temp.json data sources</h3>
-        <p>
-          Considered registries: stadt wuppertal, timberconnect, dace.
-        </p>
+        <h3>Integrate data sources</h3>
       </div>
       <button class="panel-close" (click)="closeSourceModal()" aria-label="Close">
         <i class="fa-solid fa-xmark"></i>
@@ -134,7 +131,7 @@
       <div class="error-text" *ngIf="sourceError">{{ sourceError }}</div>
 
       <div class="source-column" *ngIf="!sourceLoading">
-        <h4>Public (*temp* im Titel) - {{ publicSources.length }}</h4>
+        <h4>Public - {{ publicSources.length }}</h4>
         <div class="source-entry" *ngFor="let source of publicSources">
           <div class="source-entry-content">
             <div class="source-entry-title">{{ source.title }}</div>
@@ -145,20 +142,23 @@
           </button>
         </div>
         <div class="source-footnote" *ngIf="publicSources.length === 0">
-          No public temp.json source found.
+          No public source with *temp* in title found.
         </div>
       </div>
 
       <div class="source-column" *ngIf="!sourceLoading">
-        <h4>All public datasets (Debug) - {{ allPublicSources.length }}</h4>
-        <div class="source-entry" *ngFor="let source of allPublicSources">
+        <h4>Restricted - {{ restrictedSources.length }}</h4>
+        <div class="source-entry" *ngFor="let source of restrictedSources">
           <div class="source-entry-content">
             <div class="source-entry-title">{{ source.title }}</div>
             <div class="source-entry-meta">{{ source.accessUrl }}</div>
           </div>
+          <button class="source-action" [disabled]="isRestrictedRequested(source.key)" (click)="requestRestrictedSource(source)">
+            {{ isRestrictedRequested(source.key) ? 'Requested' : 'Request access' }}
+          </button>
         </div>
-        <div class="source-footnote" *ngIf="allPublicSources.length === 0">
-          No public datasets discovered from configured registries.
+        <div class="source-footnote" *ngIf="restrictedSources.length === 0">
+          No restricted source with *temp* in title found.
         </div>
       </div>
     </div>

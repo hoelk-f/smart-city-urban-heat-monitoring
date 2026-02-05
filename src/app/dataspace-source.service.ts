@@ -47,11 +47,16 @@ export class DataspaceSourceService {
     });
 
   async discoverTempJsonSources(): Promise<TempJsonSource[]> {
-    const publicSources = await this.discoverPublicSources();
-    return publicSources.filter((entry) => this.matchesTempTitle(entry.title));
+    const allSources = await this.discoverAllSources();
+    return allSources.filter((entry) => this.matchesTempTitle(entry.title));
   }
 
   async discoverPublicSources(): Promise<TempJsonSource[]> {
+    const allSources = await this.discoverAllSources();
+    return allSources.filter((entry) => entry.isPublic);
+  }
+
+  async discoverAllSources(): Promise<TempJsonSource[]> {
     const members = await this.loadRegistryMembers();
     const catalogs = await Promise.all(members.map(async (member) => this.resolveCatalogUrl(member)));
     const uniqueCatalogs = Array.from(new Set(catalogs.filter((value): value is string => Boolean(value))));
@@ -60,7 +65,6 @@ export class DataspaceSourceService {
     const dedupe = new Map<string, TempJsonSource>();
 
     merged.forEach((entry) => {
-      if (!entry.isPublic) return;
       if (!dedupe.has(entry.key)) {
         dedupe.set(entry.key, entry);
       }
