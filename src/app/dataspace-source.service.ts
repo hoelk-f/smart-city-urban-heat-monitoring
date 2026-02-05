@@ -28,9 +28,6 @@ const REGISTRY_PRESETS = [
   'https://tmdt-solid-community-server.de/semanticdatacatalog/public/timberconnect',
 ];
 
-const REQUESTER_WEB_ID =
-  'https://tmdt-solid-community-server.de/heatmonitoringapp/profile/card#me';
-const REQUESTER_POD = 'https://tmdt-solid-community-server.de/heatmonitoringapp/';
 
 export type DecisionState = 'approved' | 'denied' | 'revoked' | 'expired' | 'pending' | 'none';
 
@@ -70,11 +67,14 @@ export class DataspaceSourceService {
   constructor(private auth: SolidAuthService) {}
 
   getRequesterWebId(): string {
-    return REQUESTER_WEB_ID;
+    return this.auth.webId() || '';
   }
 
   async discoverTempJsonSources(): Promise<TempJsonSource[]> {
-    const requesterWebId = this.auth.webId() || REQUESTER_WEB_ID;
+    const requesterWebId = this.auth.webId();
+    if (!requesterWebId) {
+      throw new Error('Please sign in with your Solid account first.');
+    }
     const members = await this.loadRegistryMembers(requesterWebId);
     const catalogs = await Promise.all(
       members.map(async (member) => this.resolveCatalogUrl(member))
@@ -105,7 +105,10 @@ export class DataspaceSourceService {
     }
 
     const now = new Date().toISOString();
-    const requesterWebId = this.auth.webId() || REQUESTER_WEB_ID;
+    const requesterWebId = this.auth.webId();
+    if (!requesterWebId) {
+      throw new Error('Requester WebID unavailable. Please sign in again.');
+    }
     const turtle = [
       `@prefix sdm: <${SDM_NS}>.`,
       '@prefix dct: <http://purl.org/dc/terms/>.',
@@ -163,8 +166,11 @@ export class DataspaceSourceService {
   }
 
   async loadDecisionStateBySourceKey(): Promise<Map<string, AccessDecisionItem>> {
-    const requesterWebId = this.auth.webId() || REQUESTER_WEB_ID;
-    const inbox = (await this.resolveInboxUrl(requesterWebId)) || `${REQUESTER_POD}inbox/`;
+    const requesterWebId = this.auth.webId();
+    if (!requesterWebId) {
+      return new Map<string, AccessDecisionItem>();
+    }
+    const inbox = (await this.resolveInboxUrl(requesterWebId)) || `${this.getPodRoot(requesterWebId)}inbox/`;
     const result = new Map<string, AccessDecisionItem>();
 
     const inboxDataset = await getSolidDataset(inbox, { fetch: this.noCacheFetch });

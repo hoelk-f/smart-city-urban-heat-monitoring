@@ -68,7 +68,7 @@ export class LeafletMapComponent implements OnInit, OnDestroy {
   public sourceError = '';
   public requestError = '';
   public pollingError = '';
-  public requesterWebId = this.dataspaceSourceService.getRequesterWebId();
+  public requesterWebId = "";
   public isLoggedIn = false;
   public currentWebId = '';
   public activeRegion = {
@@ -157,8 +157,18 @@ export class LeafletMapComponent implements OnInit, OnDestroy {
 
   openSourceModal(): void {
     this.sourceModalOpen = true;
-    this.requesterWebId = this.authService.webId() || this.dataspaceSourceService.getRequesterWebId();
-    this.loadDiscoverableSources();
+    this.requestError = '';
+    this.sourceError = '';
+    this.requesterWebId = this.authService.webId();
+
+    if (!this.isLoggedIn || !this.requesterWebId) {
+      this.publicSources = [];
+      this.restrictedSources = [];
+      this.sourceError = 'Please sign in with your Solid account first.';
+      return;
+    }
+
+    void this.loadDiscoverableSources();
   }
 
   closeSourceModal(): void {
@@ -168,12 +178,24 @@ export class LeafletMapComponent implements OnInit, OnDestroy {
   }
 
   async loadDiscoverableSources(): Promise<void> {
+    if (!this.isLoggedIn || !this.authService.webId()) {
+      this.sourceError = 'Please sign in with your Solid account first.';
+      this.publicSources = [];
+      this.restrictedSources = [];
+      return;
+    }
+
     this.sourceLoading = true;
     this.sourceError = '';
     try {
       const discovered = await this.dataspaceSourceService.discoverTempJsonSources();
+      const decisions = await this.dataspaceSourceService.loadDecisionStateBySourceKey();
+      this.decisionBySourceKey = decisions;
+
       this.publicSources = discovered.filter((item) => item.isPublic);
-      this.restrictedSources = discovered.filter((item) => !item.isPublic);
+      this.restrictedSources = discovered.filter(
+        (item) => !item.isPublic && decisions.get(item.key)?.state === 'approved'
+      );
     } catch (err) {
       this.sourceError = this.toErrorMessage(err, 'Could not load discoverable data sources.');
     } finally {
@@ -414,7 +436,7 @@ export class LeafletMapComponent implements OnInit, OnDestroy {
     await this.authService.logout();
     this.isLoggedIn = false;
     this.currentWebId = '';
-    this.requesterWebId = this.dataspaceSourceService.getRequesterWebId();
+    this.requesterWebId = "";
   }
 
   private simulateSensorVariation(): void {
@@ -665,7 +687,7 @@ export class LeafletMapComponent implements OnInit, OnDestroy {
       await this.authService.init();
       this.isLoggedIn = this.authService.isLoggedIn();
       this.currentWebId = this.authService.webId();
-      this.requesterWebId = this.currentWebId || this.dataspaceSourceService.getRequesterWebId();
+      this.requesterWebId = this.currentWebId || "";
     } catch (err) {
       this.requestError = this.toErrorMessage(err, 'Solid session restore failed.');
     }

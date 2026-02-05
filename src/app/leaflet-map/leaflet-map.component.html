@@ -35,9 +35,6 @@
       <div class="source-footnote" *ngIf="currentWebId">
         WebID: <a [href]="currentWebId" target="_blank" rel="noopener">{{ currentWebId }}</a>
       </div>
-      <div class="source-footnote" *ngIf="!isLoggedIn">
-        Test account: <code>heatmonitoringapp&#64;uni-wuppertal.de</code>
-      </div>
     </div>
 
     <div class="panel-section" *ngIf="pollingError">
@@ -85,7 +82,7 @@
         <div class="source-footnote">No additional data source integrated yet.</div>
       </ng-template>
 
-      <div class="source-footnote">
+      <div class="source-footnote" *ngIf="requesterWebId">
         Requester WebID: <a [href]="requesterWebId" target="_blank" rel="noopener">{{ requesterWebId }}</a>
       </div>
       <div class="error-text" *ngIf="requestError">{{ requestError }}</div>
@@ -176,17 +173,16 @@
 
           <button
             class="source-action"
-            [disabled]="isSourceIntegrated(source.key) || isRestrictedDisabled(source) || getRestrictedState(source) === 'pending'"
-            (click)="getRestrictedState(source) === 'approved' ? integrateRestrictedSource(source) : requestRestrictedSource(source)"
+            [disabled]="isSourceIntegrated(source.key)"
+            (click)="integrateRestrictedSource(source)"
           >
             {{ isSourceIntegrated(source.key)
               ? 'Integrated'
-              : getRestrictedState(source) === 'approved'
-                ? 'Integrate'
-                : getRestrictedState(source) === 'pending'
-                  ? 'Pending'
-                  : 'Request access' }}
+              : 'Integrate' }}
           </button>
+        </div>
+        <div class="source-footnote" *ngIf="restrictedSources.length === 0">
+          No restricted source with active access found.
         </div>
       </div>
     </div>
