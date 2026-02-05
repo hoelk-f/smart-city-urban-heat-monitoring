@@ -366,11 +366,10 @@ export class LeafletMapComponent implements OnInit, OnDestroy {
     const values = this.normalizeHistory(entry.history);
     const chartSvg = this.createSparklineSvg(values);
     const title = entry.sourceTitle ? this.escapeHtml(entry.sourceTitle) : 'Sensor';
-    return `<div style="min-width:180px"><strong>${title}</strong><br/>Temperature: ${entry.temp.toFixed(
+    return `<div style="min-width:260px"><strong>${title}</strong><br/>Temperature: ${entry.temp.toFixed(
       2
-    )}Â°C<br/><div style="margin-top:6px">${chartSvg}</div></div>`;
+    )}°C<br/><div style="margin-top:6px">${chartSvg}</div></div>`;
   }
-
   private getIconPath(entry: TemperatureEntry): string {
     if (!entry.activated) return 'assets/stationary_sensor_disabled.png';
     if (entry.sourceKey) return 'assets/sensor.png';
@@ -561,23 +560,71 @@ export class LeafletMapComponent implements OnInit, OnDestroy {
     if (values.length === 0) {
       return '<div style="font-size:12px;color:#64748b">No values</div>';
     }
-    const width = 150;
-    const height = 42;
+    const width = 248;
+    const height = 138;
+    const padLeft = 42;
+    const padRight = 14;
+    const padTop = 16;
+    const padBottom = 28;
+    const chartW = width - padLeft - padRight;
+    const chartH = height - padTop - padBottom;
+
     const min = Math.min(...values);
     const max = Math.max(...values);
+    const mid = (min + max) / 2;
     const spread = max - min || 1;
+
+    const toX = (index: number) => padLeft + (index / Math.max(values.length - 1, 1)) * chartW;
+    const toY = (value: number) => padTop + (1 - (value - min) / spread) * chartH;
+
     const points = values
       .map((value, index) => {
-        const x = (index / Math.max(values.length - 1, 1)) * (width - 8) + 4;
-        const y = height - ((value - min) / spread) * (height - 8) - 4;
+        const x = toX(index);
+        const y = toY(value);
         return `${x.toFixed(2)},${y.toFixed(2)}`;
       })
       .join(' ');
+
+    const yMin = toY(min);
+    const yMid = toY(mid);
+    const yMax = toY(max);
+
+    const circles = values
+      .map((value, index) => {
+        const x = toX(index);
+        const y = toY(value);
+        return `<circle cx="${x.toFixed(2)}" cy="${y.toFixed(2)}" r="2.7" fill="#1d4ed8" />`;
+      })
+      .join('');
+
+    const labels = values
+      .map((value, index) => {
+        const x = toX(index);
+        const y = toY(value);
+        const dy = y < padTop + 14 ? 12 : -6;
+        return `<text x="${x.toFixed(2)}" y="${(y + dy).toFixed(2)}" font-size="9" text-anchor="middle" fill="#334155">${value.toFixed(1)}</text>`;
+      })
+      .join('');
+
     return `<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" role="img" aria-label="Last ${
       values.length
-    } values"><rect x="0" y="0" width="${width}" height="${height}" fill="#f8fafc"/><polyline points="${points}" fill="none" stroke="#2563eb" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+    } values">
+      <rect x="0" y="0" width="${width}" height="${height}" fill="#f8fafc"/>
+      <line x1="${padLeft}" y1="${yMin.toFixed(2)}" x2="${(padLeft + chartW).toFixed(2)}" y2="${yMin.toFixed(2)}" stroke="#e2e8f0" stroke-width="1"/>
+      <line x1="${padLeft}" y1="${yMid.toFixed(2)}" x2="${(padLeft + chartW).toFixed(2)}" y2="${yMid.toFixed(2)}" stroke="#cbd5e1" stroke-width="1" stroke-dasharray="3 2"/>
+      <line x1="${padLeft}" y1="${yMax.toFixed(2)}" x2="${(padLeft + chartW).toFixed(2)}" y2="${yMax.toFixed(2)}" stroke="#e2e8f0" stroke-width="1"/>
+      <line x1="${padLeft}" y1="${padTop}" x2="${padLeft}" y2="${(padTop + chartH).toFixed(2)}" stroke="#334155" stroke-width="1.2"/>
+      <line x1="${padLeft}" y1="${(padTop + chartH).toFixed(2)}" x2="${(padLeft + chartW).toFixed(2)}" y2="${(padTop + chartH).toFixed(2)}" stroke="#334155" stroke-width="1.2"/>
+      <polyline points="${points}" fill="none" stroke="#2563eb" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      ${circles}
+      ${labels}
+      <text x="${(padLeft - 6).toFixed(2)}" y="${yMax.toFixed(2)}" font-size="10" text-anchor="end" fill="#334155">${max.toFixed(1)}°C</text>
+      <text x="${(padLeft - 6).toFixed(2)}" y="${yMid.toFixed(2)}" font-size="10" text-anchor="end" fill="#334155">${mid.toFixed(1)}°C</text>
+      <text x="${(padLeft - 6).toFixed(2)}" y="${yMin.toFixed(2)}" font-size="10" text-anchor="end" fill="#334155">${min.toFixed(1)}°C</text>
+      <text x="${padLeft}" y="${(height - 8).toFixed(2)}" font-size="10" text-anchor="start" fill="#334155">oldest</text>
+      <text x="${(padLeft + chartW).toFixed(2)}" y="${(height - 8).toFixed(2)}" font-size="10" text-anchor="end" fill="#334155">newest</text>
+    </svg>`;
   }
-
   private escapeHtml(value: string): string {
     return value
       .replace(/&/g, '&amp;')
