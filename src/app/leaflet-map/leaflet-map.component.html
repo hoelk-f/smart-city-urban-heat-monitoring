@@ -134,7 +134,7 @@
       <div class="error-text" *ngIf="sourceError">{{ sourceError }}</div>
 
       <div class="source-column" *ngIf="!sourceLoading">
-        <h4>Public</h4>
+        <h4>Public (*temp* im Titel) - {{ publicSources.length }}</h4>
         <div class="source-entry" *ngFor="let source of publicSources">
           <div class="source-entry-content">
             <div class="source-entry-title">{{ source.title }}</div>
@@ -146,6 +146,19 @@
         </div>
         <div class="source-footnote" *ngIf="publicSources.length === 0">
           No public temp.json source found.
+        </div>
+      </div>
+
+      <div class="source-column" *ngIf="!sourceLoading">
+        <h4>All public datasets (Debug) - {{ allPublicSources.length }}</h4>
+        <div class="source-entry" *ngFor="let source of allPublicSources">
+          <div class="source-entry-content">
+            <div class="source-entry-title">{{ source.title }}</div>
+            <div class="source-entry-meta">{{ source.accessUrl }}</div>
+          </div>
+        </div>
+        <div class="source-footnote" *ngIf="allPublicSources.length === 0">
+          No public datasets discovered from configured registries.
         </div>
       </div>
     </div>

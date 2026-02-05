@@ -58,6 +58,7 @@ export class LeafletMapComponent implements OnInit, OnDestroy {
   };
 
   public publicSources: TempJsonSource[] = [];
+  public allPublicSources: TempJsonSource[] = [];
   public integratedSources: IntegratedSource[] = [];
 
   public dataSources = {
@@ -142,8 +143,9 @@ export class LeafletMapComponent implements OnInit, OnDestroy {
     this.sourceLoading = true;
     this.sourceError = '';
     try {
-      const discovered = await this.dataspaceSourceService.discoverTempJsonSources();
-      this.publicSources = discovered;
+      const allPublic = await this.dataspaceSourceService.discoverPublicSources();
+      this.allPublicSources = allPublic;
+      this.publicSources = allPublic.filter((source) => /temp/i.test(source.title || ''));
     } catch (err) {
       this.sourceError = this.toErrorMessage(err, 'Could not load discoverable public data sources.');
     } finally {
