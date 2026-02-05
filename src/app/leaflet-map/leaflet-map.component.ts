@@ -3,8 +3,6 @@ import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { HttpClient } from '@angular/common/http';
 import { MarkerData } from '../interface/MarkerData';
-import { Observable, of } from 'rxjs';
-import { catchError, map, switchMap } from 'rxjs/operators';
 import { SensorDataService } from '../sensor-data.service';
 
 @Component({
@@ -19,8 +17,12 @@ export class LeafletMapComponent implements OnInit {
   private temperatureLegend!: L.Control;
   private temperatureWeatherReportLegend!: L.Control;
   private markers: L.Marker[] = [];
+  private readonly simulationIntervalMs = 5000;
+  private readonly simulationDelta = 0.4;
+  private readonly minSimulatedTemp = -10;
+  private readonly maxSimulatedTemp = 50;
   
-  public weatherReportTemp: number = 18;
+  public weatherReportTemp: number = 6.8;
   public temperatureData: any[] = [];
   public averageTemperature: number = 0;
   public activeSensorCount: number = 0;
@@ -53,8 +55,9 @@ export class LeafletMapComponent implements OnInit {
 
   public areaLegend = [
     { label: "< 0°C", color: "#00008B" },
-    { label: "0-11°C", color: "#1E90FF" },
-    { label: "11-20°C", color: "#00CED1" },
+    { label: "0-6°C", color: "#1E90FF" },
+    { label: "6-11°C", color: "#00CED1" },
+    { label: "11-20°C", color: "#ADFF2F" },
     { label: "20-30°C", color: "#ADFF2F" },
     { label: "30-40°C", color: "#FFA500" },
     { label: "> 40°C", color: "#8B0000" },
@@ -89,7 +92,7 @@ export class LeafletMapComponent implements OnInit {
         const averageTemp = this.calculateOverallAverageTemperature();
         this.averageTemperature = averageTemp;
         this.updateTemperatureLegend(averageTemp);
-      }, 5000);
+      }, this.simulationIntervalMs);
     }
   }
 
@@ -197,30 +200,26 @@ export class LeafletMapComponent implements OnInit {
 
     loadGeoJson();
 
-    setInterval(async () => {
-      try {
-        const updatedData = await this.sensorDataService.loadAllSensors();
+    setInterval(() => {
+      this.simulateSensorVariation();
+      this.updateMarkers();
+      const averageTemp = this.calculateOverallAverageTemperature();
+      this.averageTemperature = averageTemp;
+      this.activeSensorCount = this.temperatureData.filter((m) => m.activated).length;
+      this.updateTemperatureLegend(averageTemp);
+    }, this.simulationIntervalMs);
+  }
 
-        updatedData.forEach(sensor => {
-          const dataIndex = this.temperatureData.findIndex(
-            td => td.lat === sensor.lat && td.lng === sensor.lng
-          );
+  private simulateSensorVariation(): void {
+    this.temperatureData.forEach((entry) => {
+      const delta = (Math.random() * 2 - 1) * this.simulationDelta;
+      const nextValue = Number(entry.temp) + delta;
+      entry.temp = this.clamp(nextValue, this.minSimulatedTemp, this.maxSimulatedTemp);
+    });
+  }
 
-          if (dataIndex >= 0) {
-            this.temperatureData[dataIndex].temp = sensor.temp;
-            this.temperatureData[dataIndex].activated = sensor.activated;
-          }
-        });
-
-        this.updateMarkers();
-        const averageTemp = this.calculateOverallAverageTemperature();
-        this.averageTemperature = averageTemp;
-        this.activeSensorCount = this.temperatureData.filter((m) => m.activated).length;
-        this.updateTemperatureLegend(averageTemp);
-      } catch (err) {
-        console.error('Failed to update sensor data:', err);
-      }
-    }, 5000);
+  private clamp(value: number, min: number, max: number): number {
+    return Math.min(max, Math.max(min, value));
   }
 
   private updateMarkers() {
@@ -338,8 +337,9 @@ export class LeafletMapComponent implements OnInit {
 
   private getColorByAvgTemp(avgTemp: number): string {
     return avgTemp < 0    ? '#00008B' :   // Dark blue for < 0°C
-           avgTemp < 11   ? '#1E90FF' :   // Light blue for 0-10°C
-           avgTemp < 20   ? '#00CED1' :   // Turquoise blue for 10-20°C
+           avgTemp < 6    ? '#1E90FF' :   // Light blue for 0-6°C
+           avgTemp < 11   ? '#00CED1' :   // Turquoise blue for 6-11°C
+           avgTemp < 20   ? '#ADFF2F' :   // Yellow-green for 11-20°C
            avgTemp < 30   ? '#ADFF2F' :   // Yellow-green for 20-30°C
            avgTemp < 40   ? '#FFA500' :   // Orange for 30-40°C
                             '#8B0000';    // Dark red for > 40°C
@@ -353,8 +353,9 @@ export class LeafletMapComponent implements OnInit {
       div.innerHTML = `
         <h6>Temperature (Area)</h6>
         <i style="background:#00008B"></i> < 0°C<br>
-        <i style="background:#1E90FF"></i> 0-11°C<br>
-        <i style="background:#00CED1"></i> 11-20°C<br>
+        <i style="background:#1E90FF"></i> 0-6°C<br>
+        <i style="background:#00CED1"></i> 6-11°C<br>
+        <i style="background:#ADFF2F"></i> 11-20°C<br>
         <i style="background:#ADFF2F"></i> 20-30°C<br>
         <i style="background:#FFA500"></i> 30-40°C<br>
         <i style="background:#8B0000"></i> > 40°C
