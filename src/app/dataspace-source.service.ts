@@ -51,7 +51,7 @@ export class DataspaceSourceService {
     const dedupe = new Map<string, TempJsonSource>();
 
     merged.forEach((entry) => {
-      if (!entry.isPublic || !this.isTempJson(entry.accessUrl)) return;
+      if (!entry.isPublic || !this.matchesTempTitle(entry.title)) return;
       if (!dedupe.has(entry.key)) {
         dedupe.set(entry.key, entry);
       }
@@ -208,9 +208,8 @@ export class DataspaceSourceService {
     return { ts, temperature, humidity, lat, lng };
   }
 
-  private isTempJson(url: string): boolean {
-    const lower = this.getDocumentUrl(url).toLowerCase();
-    return lower.endsWith('.json') && lower.includes('temp');
+  private matchesTempTitle(title: string): boolean {
+    return /temp/i.test(title || '');
   }
 
   private getDocumentUrl(resourceUrl: string): string {
