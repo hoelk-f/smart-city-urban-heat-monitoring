@@ -48,7 +48,9 @@ export class DataspaceSourceService {
 
   async discoverTempJsonSources(): Promise<TempJsonSource[]> {
     const allSources = await this.discoverAllSources();
-    return allSources.filter((entry) => this.matchesTempTitle(entry.title));
+    return allSources.filter(
+      (entry) => this.matchesTempTitle(entry.title) && !this.isIgnoredDataset(entry.title)
+    );
   }
 
   async discoverPublicSources(): Promise<TempJsonSource[]> {
@@ -74,6 +76,14 @@ export class DataspaceSourceService {
   }
 
   async loadLatestReading(url: string): Promise<SensorReading> {
+    const latestReadings = await this.loadLatestReadings(url, 1);
+    if (latestReadings.length === 0) {
+      throw new Error('No valid temperature rows in source.');
+    }
+    return latestReadings[latestReadings.length - 1];
+  }
+
+  async loadLatestReadings(url: string, limit = 10): Promise<SensorReading[]> {
     const response = await this.noCacheFetch(url);
     if (!response.ok) {
       throw new Error(`Could not load source (${response.status}).`);
@@ -89,11 +99,9 @@ export class DataspaceSourceService {
       .filter((row): row is SensorReading => row !== null)
       .sort((a, b) => Date.parse(a.ts) - Date.parse(b.ts));
 
-    if (validRows.length === 0) {
-      throw new Error('No valid temperature rows in source.');
-    }
-
-    return validRows[validRows.length - 1];
+    if (validRows.length === 0) return [];
+    if (limit <= 0) return [];
+    return validRows.slice(-limit);
   }
 
   buildSourceKey(identifier: string, accessUrl: string): string {
@@ -231,6 +239,10 @@ export class DataspaceSourceService {
 
   private matchesTempTitle(title: string): boolean {
     return /temp/i.test(title || '');
+  }
+
+  private isIgnoredDataset(title: string): boolean {
+    return (title || '').trim().toLowerCase() === 'road temperature sensor data in seattle';
   }
 
   private getDocumentUrl(resourceUrl: string): string {

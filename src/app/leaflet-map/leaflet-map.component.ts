@@ -11,11 +11,13 @@ interface TemperatureEntry {
   lat: number;
   lng: number;
   activated: boolean;
+  history: number[];
   coordinates?: L.LatLngExpression[][][];
   name?: string;
   polygonLayer?: L.Polygon;
   sourceKey?: string;
   sourceTitle?: string;
+  sourceAccessUrl?: string;
 }
 
 interface IntegratedSource {
@@ -35,6 +37,7 @@ export class LeafletMapComponent implements OnInit, OnDestroy {
   private map!: L.Map;
   private markers: L.Marker[] = [];
   private readonly simulationIntervalMs = 10000;
+  private readonly historyLength = 10;
   private readonly simulationDelta = 0.4;
   private readonly minSimulatedTemp = -10;
   private readonly maxSimulatedTemp = 50;
@@ -73,22 +76,22 @@ export class LeafletMapComponent implements OnInit, OnDestroy {
   };
 
   public deviationLegend = [
-    { label: '0.2°C', color: '#008000' },
-    { label: '0.4°C', color: '#246e00' },
-    { label: '0.6°C', color: '#495b00' },
-    { label: '0.8°C', color: '#6d4900' },
-    { label: '1.0°C', color: '#db1200' },
-    { label: '> 1.2°C', color: '#ff0000' },
+    { label: '0.2Â°C', color: '#008000' },
+    { label: '0.4Â°C', color: '#246e00' },
+    { label: '0.6Â°C', color: '#495b00' },
+    { label: '0.8Â°C', color: '#6d4900' },
+    { label: '1.0Â°C', color: '#db1200' },
+    { label: '> 1.2Â°C', color: '#ff0000' },
   ];
 
   public areaLegend = [
-    { label: '< 0°C', color: '#00008B' },
-    { label: '0-6°C', color: '#1E90FF' },
-    { label: '6-11°C', color: '#00CED1' },
-    { label: '11-20°C', color: '#ADFF2F' },
-    { label: '20-30°C', color: '#ADFF2F' },
-    { label: '30-40°C', color: '#FFA500' },
-    { label: '> 40°C', color: '#8B0000' },
+    { label: '< 0Â°C', color: '#00008B' },
+    { label: '0-6Â°C', color: '#1E90FF' },
+    { label: '6-11Â°C', color: '#00CED1' },
+    { label: '11-20Â°C', color: '#ADFF2F' },
+    { label: '20-30Â°C', color: '#ADFF2F' },
+    { label: '30-40Â°C', color: '#FFA500' },
+    { label: '> 40Â°C', color: '#8B0000' },
   ];
 
   constructor(
@@ -105,7 +108,7 @@ export class LeafletMapComponent implements OnInit, OnDestroy {
     this.map = L.map('map').setView([51.2562, 7.1508], 12);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19,
-      attribution: '© OpenStreetMap contributors',
+      attribution: 'Â© OpenStreetMap contributors',
     }).addTo(this.map);
 
     this.map.on('contextmenu', (e: L.LeafletMouseEvent) => {
@@ -190,14 +193,23 @@ export class LeafletMapComponent implements OnInit, OnDestroy {
     }
 
     try {
-      const latest = await this.dataspaceSourceService.loadLatestReading(source.accessUrl);
+      const latestReadings = await this.dataspaceSourceService.loadLatestReadings(
+        source.accessUrl,
+        this.historyLength
+      );
+      if (latestReadings.length === 0) {
+        throw new Error('Source contains no usable temperature readings.');
+      }
+      const latest = latestReadings[latestReadings.length - 1];
       this.temperatureData.push({
         temp: latest.temperature,
         lat: latest.lat,
         lng: latest.lng,
         activated: true,
+        history: this.normalizeHistory(latestReadings.map((item) => item.temperature)),
         sourceKey: source.key,
         sourceTitle: source.title,
+        sourceAccessUrl: source.accessUrl,
       });
       this.integratedSources.push({
         key: source.key,
@@ -252,6 +264,7 @@ export class LeafletMapComponent implements OnInit, OnDestroy {
             temp: sensorData.temp,
             lat: sensorData.lat,
             lng: sensorData.lng,
+            history: this.normalizeHistory([sensorData.temp]),
             coordinates: feature.geometry.coordinates,
             name: feature.properties.NAME,
             activated: sensorData.activated,
@@ -269,18 +282,50 @@ export class LeafletMapComponent implements OnInit, OnDestroy {
 
   private startSimulationLoop(): void {
     this.simulationTimerId = window.setInterval(() => {
-      this.simulateSensorVariation();
-      this.updateMarkerPopupsAndIcons();
-      this.recalculateStats();
+      void this.runSimulationTick();
     }, this.simulationIntervalMs);
+  }
+
+  private async runSimulationTick(): Promise<void> {
+    this.simulateSensorVariation();
+    await this.refreshIntegratedSources();
+    this.updateMarkerPopupsAndIcons();
+    this.recalculateStats();
   }
 
   private simulateSensorVariation(): void {
     this.temperatureData.forEach((entry) => {
+      if (entry.sourceKey) return;
       const delta = (Math.random() * 2 - 1) * this.simulationDelta;
       const nextValue = Number(entry.temp) + delta;
       entry.temp = this.clamp(nextValue, this.minSimulatedTemp, this.maxSimulatedTemp);
+      this.appendHistory(entry, entry.temp);
     });
+  }
+
+  private async refreshIntegratedSources(): Promise<void> {
+    const externalEntries = this.temperatureData.filter(
+      (entry) => Boolean(entry.sourceKey && entry.sourceAccessUrl)
+    );
+
+    await Promise.all(
+      externalEntries.map(async (entry) => {
+        try {
+          const readings = await this.dataspaceSourceService.loadLatestReadings(
+            entry.sourceAccessUrl as string,
+            this.historyLength
+          );
+          if (readings.length === 0) return;
+          const latest = readings[readings.length - 1];
+          entry.temp = latest.temperature;
+          entry.lat = latest.lat;
+          entry.lng = latest.lng;
+          entry.history = this.normalizeHistory(readings.map((item) => item.temperature));
+        } catch {
+          // Keep last known state if source update fails.
+        }
+      })
+    );
   }
 
   private clamp(value: number, min: number, max: number): number {
@@ -292,13 +337,13 @@ export class LeafletMapComponent implements OnInit, OnDestroy {
     this.markers = [];
 
     this.temperatureData.forEach((data) => {
-      const iconPath = data.activated ? 'assets/stationary_sensor.png' : 'assets/stationary_sensor_disabled.png';
+      const iconPath = this.getIconPath(data);
       const marker = L.marker([data.lat, data.lng], { icon: this.createIconStatic(iconPath) });
       marker.bindPopup(this.buildPopupContent(data));
 
       marker.on('contextmenu', () => {
         data.activated = !data.activated;
-        const newIconPath = data.activated ? 'assets/stationary_sensor.png' : 'assets/stationary_sensor_disabled.png';
+        const newIconPath = this.getIconPath(data);
         marker.setIcon(this.createIconStatic(newIconPath));
       });
 
@@ -311,18 +356,25 @@ export class LeafletMapComponent implements OnInit, OnDestroy {
     this.temperatureData.forEach((entry, index) => {
       const marker = this.markers[index];
       if (!marker) return;
+      marker.setLatLng([entry.lat, entry.lng]);
       marker.getPopup()?.setContent(this.buildPopupContent(entry));
-      marker.setIcon(
-        this.createIconStatic(entry.activated ? 'assets/stationary_sensor.png' : 'assets/stationary_sensor_disabled.png')
-      );
+      marker.setIcon(this.createIconStatic(this.getIconPath(entry)));
     });
   }
 
   private buildPopupContent(entry: TemperatureEntry): string {
-    if (entry.sourceTitle) {
-      return `${entry.sourceTitle}<br/>Temperature: ${entry.temp.toFixed(2)}°C`;
-    }
-    return `Temperature: ${entry.temp.toFixed(2)}°C`;
+    const values = this.normalizeHistory(entry.history);
+    const chartSvg = this.createSparklineSvg(values);
+    const title = entry.sourceTitle ? this.escapeHtml(entry.sourceTitle) : 'Sensor';
+    return `<div style="min-width:180px"><strong>${title}</strong><br/>Temperature: ${entry.temp.toFixed(
+      2
+    )}°C<br/><div style="margin-top:6px">${chartSvg}</div></div>`;
+  }
+
+  private getIconPath(entry: TemperatureEntry): string {
+    if (!entry.activated) return 'assets/stationary_sensor_disabled.png';
+    if (entry.sourceKey) return 'assets/sensor.png';
+    return 'assets/stationary_sensor.png';
   }
 
   private createIconStatic(path: string): L.Icon {
@@ -352,7 +404,7 @@ export class LeafletMapComponent implements OnInit, OnDestroy {
         const count = this.countMarkersInsidePolygon(polygon);
         this.activeRegion = {
           name: entry.name || 'Area',
-          temperatureLabel: count === 0 ? `Weather report ${this.weatherReportTemp}°C` : `Avg. ${meanTemp.toFixed(2)}°C`,
+          temperatureLabel: count === 0 ? `Weather report ${this.weatherReportTemp}Â°C` : `Avg. ${meanTemp.toFixed(2)}Â°C`,
           count,
           visible: true,
         };
@@ -488,11 +540,52 @@ export class LeafletMapComponent implements OnInit, OnDestroy {
       lng: latlng.lng,
       temp: Number(input),
       activated: true,
+      history: this.normalizeHistory([Number(input)]),
     });
     this.rebuildMarkers();
     this.recalculateStats();
   }
 
+
+  private appendHistory(entry: TemperatureEntry, nextValue: number): void {
+    entry.history = this.normalizeHistory([...(entry.history || []), nextValue]);
+  }
+
+  private normalizeHistory(values: number[]): number[] {
+    return values
+      .filter((value) => Number.isFinite(value))
+      .slice(-this.historyLength);
+  }
+
+  private createSparklineSvg(values: number[]): string {
+    if (values.length === 0) {
+      return '<div style="font-size:12px;color:#64748b">No values</div>';
+    }
+    const width = 150;
+    const height = 42;
+    const min = Math.min(...values);
+    const max = Math.max(...values);
+    const spread = max - min || 1;
+    const points = values
+      .map((value, index) => {
+        const x = (index / Math.max(values.length - 1, 1)) * (width - 8) + 4;
+        const y = height - ((value - min) / spread) * (height - 8) - 4;
+        return `${x.toFixed(2)},${y.toFixed(2)}`;
+      })
+      .join(' ');
+    return `<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" role="img" aria-label="Last ${
+      values.length
+    } values"><rect x="0" y="0" width="${width}" height="${height}" fill="#f8fafc"/><polyline points="${points}" fill="none" stroke="#2563eb" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+  }
+
+  private escapeHtml(value: string): string {
+    return value
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
   private toErrorMessage(err: unknown, fallback: string): string {
     if (err instanceof Error && err.message) {
       return err.message;
