@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { RouterOutlet } from '@angular/router';
 import { LeafletMapComponent } from './leaflet-map/leaflet-map.component';
 import { HttpClientModule } from '@angular/common/http';
+import { appVersion } from './version';
 
 @Component({
   selector: 'app-root',
@@ -13,4 +14,5 @@ import { HttpClientModule } from '@angular/common/http';
 })
 export class AppComponent {
   title = 'smart-city-urban-heat-monitoring';
+  appVersion = appVersion;
 }

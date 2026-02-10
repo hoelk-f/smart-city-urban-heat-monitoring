@@ -1,6 +1,6 @@
 {
   "name": "smart-city-urban-heat-monitoring",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "scripts": {
     "ng": "ng",
     "start": "ng serve --base-href /smart-city-urban-heat-monitoring/",
