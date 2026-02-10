@@ -5,6 +5,7 @@ import { HttpClient } from '@angular/common/http';
 import { MarkerData } from '../interface/MarkerData';
 import { SensorDataService } from '../sensor-data.service';
 import { DataspaceSourceService, TempJsonSource } from '../dataspace-source.service';
+import { appVersion } from '../version';
 
 interface TemperatureEntry {
   temp: number;
@@ -64,6 +65,7 @@ export class LeafletMapComponent implements OnInit, OnDestroy {
   public restrictedSources: TempJsonSource[] = [];
   public integratedSources: IntegratedSource[] = [];
   public requestedRestrictedSourceKeys = new Set<string>();
+  public appVersion = appVersion;
 
   public dataSources = {
     geojson:

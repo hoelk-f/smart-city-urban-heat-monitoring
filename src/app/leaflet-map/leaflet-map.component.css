@@ -270,6 +270,13 @@
   opacity: 0.9;
 }
 
+.panel-section.logos .panel-version {
+  margin-left: auto;
+  font-size: 12px;
+  color: #475569;
+  font-weight: 600;
+}
+
 .hover-info {
   position: absolute;
   top: 20px;
