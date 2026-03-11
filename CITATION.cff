@@ -1,0 +1,27 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it using the preferred citation below."
+title: "Smart City Urban Heat Monitoring"
+authors:
+  - name: "Institute for Technologies and Management of Digital Transformation (TMDT)"
+url: "https://tmdt.uni-wuppertal.de/"
+repository-code: "https://github.com/hoelk-f/smart-city-urban-heat-monitoring"
+license: "Apache-2.0"
+version: "0.3.3"
+preferred-citation:
+  type: conference-paper
+  title: "Smart City Urban Heat Monitoring using a Solid-based Dataspace"
+  authors:
+    - family-names: "Hölken"
+      given-names: "Florian"
+    - family-names: "Paulus"
+      given-names: "Alexander"
+    - family-names: "Meisen"
+      given-names: "Tobias"
+    - family-names: "Pomp"
+      given-names: "André"
+  conference: "The Third International Workshop on Semantics in Dataspaces, co-located with the Extended Semantic Web Conference"
+  collection-title: "CEUR Workshop Proceedings"
+  volume: "4007"
+  location: "Portorož, Slovenia"
+  year: 2025
+  url: "https://ceur-ws.org/Vol-4007/03regular.pdf"

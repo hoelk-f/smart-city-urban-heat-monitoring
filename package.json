@@ -1,6 +1,7 @@
 {
   "name": "smart-city-urban-heat-monitoring",
-  "version": "0.3.3",
+  "version": "0.3.4",
+  "license": "Apache-2.0",
   "scripts": {
     "ng": "ng",
     "start": "ng serve --base-href /smart-city-urban-heat-monitoring/",
